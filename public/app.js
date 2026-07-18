@@ -15,6 +15,18 @@ const username = $("username");
 const toast = $("toast");
 let profilePhotoData = localStorage.getItem("waveroom-photo") || "";
 
+let voiceStream = null;
+let voiceJoined = false;
+let voiceMuted = false;
+const voicePeers = new Map();
+const voiceMutedUsers = new Map();
+const rtcConfig = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ]
+};
+
 function notify(text) {
   toast.textContent = text;
   toast.classList.remove("hidden");
@@ -368,10 +380,12 @@ function renderRoom(room) {
     $("messages").dataset.loaded = "1";
   }
 
+  updateVoiceUsers(room.voiceUsers || []);
   startSync();
 }
 
 function resetRoomUI() {
+  leaveVoiceChat(false);
   currentRoom = null;
   $("roomEntry").classList.remove("hidden");
   $("roomPanel").classList.add("hidden");
@@ -418,6 +432,173 @@ function startSync() {
       setTimeout(() => remoteAction = false, 300);
     });
   }, 3500);
+}
+
+function getVoiceUserName(id) {
+  return currentRoom?.users?.find(user => user.id === id)?.name || "Usuario";
+}
+
+function updateVoiceUsers(ids = []) {
+  const activeIds = Array.isArray(ids) ? ids : [];
+  for (const id of [...voicePeers.keys()]) {
+    if (!activeIds.includes(id)) closeVoicePeer(id);
+  }
+  $("voiceCount").textContent = activeIds.length;
+
+  if (!currentRoom) {
+    $("voiceStatus").textContent = "Entra a una sala para hablar";
+    $("voiceJoinBtn").disabled = true;
+  } else if (!voiceJoined) {
+    $("voiceStatus").textContent = activeIds.length
+      ? `${activeIds.length} persona${activeIds.length === 1 ? "" : "s"} hablando`
+      : "Nadie está hablando todavía";
+    $("voiceJoinBtn").disabled = false;
+  } else {
+    $("voiceStatus").textContent = voiceMuted ? "Micrófono silenciado" : "Micrófono activo";
+  }
+
+  $("voiceParticipants").innerHTML = activeIds.map(id => {
+    const name = id === mySocketId ? `${getVoiceUserName(id)} · Tú` : getVoiceUserName(id);
+    const muted = voiceMutedUsers.get(id) === true;
+    return `<span class="voice-chip${muted ? " muted" : ""}">${escapeHtml(name)}${muted ? " · silenciado" : ""}</span>`;
+  }).join("");
+}
+
+function setVoiceControls(joined) {
+  voiceJoined = joined;
+  $("voiceJoinBtn").classList.toggle("hidden", joined);
+  $("voiceMuteBtn").classList.toggle("hidden", !joined);
+  $("voiceLeaveBtn").classList.toggle("hidden", !joined);
+  if (!joined) {
+    voiceMuted = false;
+    $("voiceMuteBtn").classList.remove("is-muted");
+    $("voiceMuteBtn").textContent = "🔇 Silenciar";
+  }
+}
+
+function closeVoicePeer(id) {
+  const peer = voicePeers.get(id);
+  if (peer) {
+    peer.close();
+    voicePeers.delete(id);
+  }
+  document.getElementById(`voice-audio-${id}`)?.remove();
+}
+
+function createVoicePeer(id) {
+  if (voicePeers.has(id)) return voicePeers.get(id);
+  const peer = new RTCPeerConnection(rtcConfig);
+  voicePeers.set(id, peer);
+
+  voiceStream?.getTracks().forEach(track => peer.addTrack(track, voiceStream));
+
+  peer.onicecandidate = event => {
+    if (event.candidate && currentRoom) {
+      socket.emit("voice-signal", {
+        code: currentRoom.code,
+        target: id,
+        data: { type: "candidate", candidate: event.candidate }
+      });
+    }
+  };
+
+  peer.ontrack = event => {
+    let audio = document.getElementById(`voice-audio-${id}`);
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = `voice-audio-${id}`;
+      audio.autoplay = true;
+      audio.playsInline = true;
+      $("remoteAudios").appendChild(audio);
+    }
+    audio.srcObject = event.streams[0];
+    audio.play().catch(() => notify("Toca la pantalla para activar el audio del chat de voz."));
+  };
+
+  peer.onconnectionstatechange = () => {
+    if (["failed", "closed"].includes(peer.connectionState)) closeVoicePeer(id);
+  };
+
+  return peer;
+}
+
+async function makeVoiceOffer(id) {
+  const peer = createVoicePeer(id);
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+  socket.emit("voice-signal", {
+    code: currentRoom.code,
+    target: id,
+    data: { type: "offer", sdp: peer.localDescription }
+  });
+}
+
+async function joinVoiceChat() {
+  if (!currentRoom) return notify("Primero crea o entra a una sala.");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return notify("Este navegador no permite usar el micrófono.");
+  }
+
+  $("voiceJoinBtn").disabled = true;
+  $("voiceStatus").textContent = "Solicitando permiso del micrófono...";
+
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+
+    socket.emit("voice-join", { code: currentRoom.code }, async response => {
+      if (!response?.ok) {
+        voiceStream.getTracks().forEach(track => track.stop());
+        voiceStream = null;
+        $("voiceJoinBtn").disabled = false;
+        return notify(response?.error || "No se pudo entrar al chat de voz.");
+      }
+
+      setVoiceControls(true);
+      voiceMutedUsers.set(mySocketId, false);
+      $("voiceStatus").textContent = "Micrófono activo";
+      notify("Entraste al chat de voz.");
+
+      for (const id of response.peers || []) {
+        try { await makeVoiceOffer(id); } catch (error) { console.error("Offer error:", error); }
+      }
+    });
+  } catch (error) {
+    console.error("Micrófono:", error);
+    $("voiceJoinBtn").disabled = false;
+    $("voiceStatus").textContent = "No se pudo activar el micrófono";
+    notify("Debes permitir el acceso al micrófono.");
+  }
+}
+
+function toggleVoiceMute() {
+  if (!voiceStream) return;
+  voiceMuted = !voiceMuted;
+  voiceStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+  voiceMutedUsers.set(mySocketId, voiceMuted);
+  $("voiceMuteBtn").classList.toggle("is-muted", voiceMuted);
+  $("voiceMuteBtn").textContent = voiceMuted ? "🎙 Activar micrófono" : "🔇 Silenciar";
+  $("voiceStatus").textContent = voiceMuted ? "Micrófono silenciado" : "Micrófono activo";
+  if (currentRoom) socket.emit("voice-mute", { code: currentRoom.code, muted: voiceMuted });
+  updateVoiceUsers(currentRoom?.voiceUsers || [...voicePeers.keys(), mySocketId]);
+}
+
+function leaveVoiceChat(notifyServer = true) {
+  if (notifyServer && currentRoom && socket.connected) {
+    socket.emit("voice-leave", { code: currentRoom.code });
+  }
+  voiceStream?.getTracks().forEach(track => track.stop());
+  voiceStream = null;
+  [...voicePeers.keys()].forEach(closeVoicePeer);
+  voiceMutedUsers.clear();
+  $("remoteAudios").innerHTML = "";
+  setVoiceControls(false);
+  if (currentRoom) {
+    $("voiceStatus").textContent = "Fuera del chat de voz";
+    $("voiceJoinBtn").disabled = false;
+  }
 }
 
 function addMessage(message) {
@@ -588,41 +769,13 @@ async function searchYouTube(query) {
   }
 }
 
-async function videoFromYouTubeLink(value) {
-  const id = parseYouTubeId(value);
-  if (!id) return null;
-
-  const response = await fetch(`/api/youtube/video?id=${encodeURIComponent(id)}`);
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "No se pudo obtener la información del video.");
-  }
-
-  return data.video;
-}
-
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   const query = $("searchInput").value.trim();
   $("searchMirror").value = query;
 
   if (!query) {
-    return notify("Escribe una canción o pega un enlace de YouTube.");
-  }
-
-  const youtubeId = parseYouTubeId(query);
-  if (youtubeId) {
-    try {
-      const video = await videoFromYouTubeLink(query);
-      addVideoToQueue(video);
-      $("searchInput").value = "";
-      $("searchMirror").value = "";
-      $("searchStatus").textContent = `Enlace agregado a la cola: ${video.title}`;
-    } catch (error) {
-      notify(error.message);
-    }
-    return;
+    return notify("Escribe el nombre de una canción.");
   }
 
   await searchYouTube(query);
@@ -640,23 +793,10 @@ function selectedVideo() {
 
 $("videoForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const value = $("youtubeUrl").value.trim();
+  const video = selectedVideo();
 
-  if (!parseYouTubeId(value)) {
-    return notify("El enlace de YouTube no es válido.");
-  }
-
-  try {
-    const video = await videoFromYouTubeLink(value);
-    const customTitle = $("videoTitle").value.trim();
-    if (customTitle) video.title = customTitle;
-
-    addVideoToQueue(video);
-    $("youtubeUrl").value = "";
-    $("videoTitle").value = "";
-  } catch (error) {
-    notify(error.message);
-  }
+  if (!video) return notify("El enlace de YouTube no es válido.");
+  await startSelectedVideo(video);
 });
 
 $("playBtn").addEventListener("click", async () => {
@@ -836,6 +976,8 @@ $("profileForm").addEventListener("submit", event => {
   if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
   else localStorage.removeItem("waveroom-photo");
   refreshProfileUI();
+setVoiceControls(false);
+$("voiceJoinBtn").disabled = true;
 
   if (currentRoom) {
     socket.emit("update-profile", { code: currentRoom.code, ...getProfile() }, response => {
@@ -860,6 +1002,7 @@ socket.on("connect", () => {
 
 socket.on("disconnect", () => {
   $("connectedText").textContent = "Desconectado";
+  leaveVoiceChat(false);
 });
 
 socket.on("room-state", room => {
@@ -915,9 +1058,54 @@ socket.on("player-action", async ({ action, time, serverTime }) => {
   setTimeout(() => remoteAction = false, 350);
 });
 
+socket.on("voice-users", ids => {
+  if (currentRoom) currentRoom.voiceUsers = ids;
+  updateVoiceUsers(ids);
+});
+
+socket.on("voice-muted", ({ id, muted }) => {
+  voiceMutedUsers.set(id, Boolean(muted));
+  updateVoiceUsers(currentRoom?.voiceUsers || []);
+});
+
+socket.on("voice-peer-left", ({ id }) => {
+  closeVoicePeer(id);
+  voiceMutedUsers.delete(id);
+});
+
+socket.on("voice-signal", async ({ from, data }) => {
+  if (!voiceJoined || !currentRoom || !data) return;
+  try {
+    const peer = createVoicePeer(from);
+    if (data.type === "offer") {
+      await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      socket.emit("voice-signal", {
+        code: currentRoom.code,
+        target: from,
+        data: { type: "answer", sdp: peer.localDescription }
+      });
+    } else if (data.type === "answer") {
+      await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    } else if (data.type === "candidate" && data.candidate) {
+      await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  } catch (error) {
+    console.error("Error de WebRTC:", error);
+  }
+});
+
 socket.on("chat", addMessage);
 socket.on("system-message", text => addMessage({ text }));
 socket.on("became-host", () => notify("Ahora eres el anfitrión."));
+
+$("voiceJoinBtn").addEventListener("click", joinVoiceChat);
+$("voiceMuteBtn").addEventListener("click", toggleVoiceMute);
+$("voiceLeaveBtn").addEventListener("click", () => {
+  leaveVoiceChat(true);
+  notify("Saliste del chat de voz.");
+});
 
 // Controles y accesos visuales del nuevo diseño.
 $("profileShortcut").addEventListener("click", openProfileModal);
@@ -985,3 +1173,5 @@ updateTrackUI(null);
 const savedName = localStorage.getItem("waveroom-name");
 if (savedName) username.value = savedName;
 refreshProfileUI();
+setVoiceControls(false);
+$("voiceJoinBtn").disabled = true;

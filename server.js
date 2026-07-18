@@ -18,59 +18,6 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "waveroom" });
 });
 
-app.get("/api/youtube/video", async (req, res) => {
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  const id = String(req.query.id || "").trim();
-
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "Falta configurar YOUTUBE_API_KEY en el servidor."
-    });
-  }
-
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
-    return res.status(400).json({ error: "El enlace de YouTube no es válido." });
-  }
-
-  try {
-    const params = new URLSearchParams({
-      part: "snippet",
-      id,
-      key: apiKey
-    });
-
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?${params.toString()}`
-    );
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data?.error?.message || "YouTube no pudo obtener el video.";
-      return res.status(response.status).json({ error: message });
-    }
-
-    const item = data.items?.[0];
-    if (!item) {
-      return res.status(404).json({ error: "No se encontró el video de YouTube." });
-    }
-
-    return res.json({
-      video: {
-        id,
-        title: item.snippet.title,
-        channel: item.snippet.channelTitle,
-        thumbnail:
-          item.snippet.thumbnails?.medium?.url ||
-          item.snippet.thumbnails?.default?.url ||
-          `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
-      }
-    });
-  } catch (error) {
-    console.error("Error obteniendo video de YouTube:", error);
-    return res.status(500).json({ error: "No se pudo conectar con YouTube." });
-  }
-});
-
 app.get("/api/youtube/search", async (req, res) => {
   const apiKey = process.env.YOUTUBE_API_KEY;
   const query = String(req.query.q || "").trim().slice(0, 150);
@@ -159,6 +106,7 @@ function publicRoom(code, room) {
     time: currentRoomTime(room),
     queue: room.queue,
     waitingForQueue: room.waitingForQueue,
+    voiceUsers: [...(room.voiceUsers || new Set())],
     chat: room.chat.slice(-80)
   };
 }
@@ -173,6 +121,7 @@ function removeFromRooms(socket) {
     if (!room.users.has(socket.id)) continue;
 
     const leavingName = room.users.get(socket.id).name;
+    room.voiceUsers?.delete(socket.id);
     room.users.delete(socket.id);
     socket.leave(code);
 
@@ -206,6 +155,7 @@ io.on("connection", socket => {
       updatedAt: Date.now(),
       queue: [],
       waitingForQueue: false,
+      voiceUsers: new Set(),
       chat: []
     };
 
@@ -252,6 +202,7 @@ io.on("connection", socket => {
 
     if (room?.users.has(socket.id)) {
       const username = room.users.get(socket.id).name;
+      room.voiceUsers?.delete(socket.id);
       room.users.delete(socket.id);
       socket.leave(code);
 
@@ -425,6 +376,47 @@ io.on("connection", socket => {
     });
 
     emitRoom(code);
+    callback?.({ ok: true });
+  });
+
+  socket.on("voice-join", ({ code }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id)) {
+      return callback?.({ ok: false, error: "Primero entra a la sala." });
+    }
+
+    room.voiceUsers ||= new Set();
+    const peers = [...room.voiceUsers].filter(id => id !== socket.id);
+    room.voiceUsers.add(socket.id);
+    io.to(code).emit("voice-users", [...room.voiceUsers]);
+    callback?.({ ok: true, peers });
+  });
+
+  socket.on("voice-signal", ({ code, target, data }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !room.voiceUsers?.has(socket.id) || !room.voiceUsers.has(target)) {
+      return callback?.({ ok: false });
+    }
+    io.to(target).emit("voice-signal", { from: socket.id, data });
+    callback?.({ ok: true });
+  });
+
+  socket.on("voice-mute", ({ code, muted }) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room?.voiceUsers?.has(socket.id)) return;
+    io.to(code).emit("voice-muted", { id: socket.id, muted: Boolean(muted) });
+  });
+
+  socket.on("voice-leave", ({ code }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (room?.voiceUsers?.delete(socket.id)) {
+      socket.to(code).emit("voice-peer-left", { id: socket.id });
+      io.to(code).emit("voice-users", [...room.voiceUsers]);
+    }
     callback?.({ ok: true });
   });
 

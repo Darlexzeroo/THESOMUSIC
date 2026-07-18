@@ -1,5 +1,5 @@
 # WaveRoom YouTube
-OlA
+v2
 Versión de WaveRoom que reproduce videos con el reproductor oficial de YouTube.
 
 ## Funciones
@@ -142,3 +142,10 @@ Health Check Path: /health
 ```
 
 No agregues `PORT` manualmente: Render lo proporciona automáticamente.
+
+## Chat de voz
+Esta versión incluye chat de voz P2P con WebRTC. Los usuarios deben entrar a una sala, pulsar "Entrar al chat de voz" y permitir el micrófono. Funciona sobre HTTPS, como el dominio que proporciona Render.
+
+## Versión 13: adaptación móvil de salas
+
+En pantallas de hasta 820 px, el bloque para crear una sala o introducir un código se muestra como una tarjeta en la parte superior. También se mantienen visibles los controles de la sala activa y el acceso al perfil.
