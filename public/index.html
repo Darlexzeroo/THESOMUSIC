@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>WaveRoom — Música compartida</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="is-idle">
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5H15v-7H9v7H3.5a.5.5 0 0 1-.5-.5z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-rooms" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20c.5-4 2.5-6 6-6s5.5 2 6 6M15 15c3.2 0 5.2 1.6 6 5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c.7-5 3.4-7.5 8-7.5s7.3 2.5 8 7.5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 7h3c5 0 7 10 12 10h3M18 4l3 3-3 3M3 17h3c1.8 0 3.2-1.3 4.4-3M18 14l3 3-3 3"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M19 6 9 12l10 6z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M5 6l10 6-10 6z"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10zM14 7l3 3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m7 9 5 5 5-5"/></symbol>
+  </svg>
+
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-wave">◢◣</span><strong>WaveRoom</strong><button class="collapse" type="button">«</button></div>
+
+      <button class="profile-card" id="openProfile" type="button">
+        <span id="avatar" class="avatar">D</span>
+        <span><strong id="profileName">David</strong><small>En línea <i></i></small></span>
+        <b><svg class="ui-icon"><use href="#i-edit"/></svg></b>
+      </button>
+
+      <nav class="side-nav">
+        <button class="active" type="button"><svg class="ui-icon"><use href="#i-home"/></svg><span>Inicio</span></button>
+        <button id="focusSearch" type="button"><svg class="ui-icon"><use href="#i-search"/></svg><span>Explorar</span></button>
+        <button id="focusRooms" type="button"><svg class="ui-icon"><use href="#i-rooms"/></svg><span>Salas</span></button>
+        <button type="button"><svg class="ui-icon"><use href="#i-users"/></svg><span>Amigos</span></button>
+        <button id="profileShortcut" type="button"><svg class="ui-icon"><use href="#i-user"/></svg><span>Perfil</span></button>
+        <button type="button"><svg class="ui-icon"><use href="#i-settings"/></svg><span>Ajustes</span></button>
+      </nav>
+
+      <section class="sidebar-section">
+        <h3>TUS SALAS</h3>
+        <div id="roomEntry" class="room-entry">
+          <div class="room-tile"><span>▣</span><div><strong>Sin sala</strong><small>Crea o únete</small></div></div>
+          <button id="createRoom" class="gradient-btn" type="button">＋ Crear sala</button>
+          <div class="join-mini"><input id="roomCodeInput" maxlength="6" placeholder="CÓDIGO"><button id="joinRoom" type="button">Entrar</button></div>
+        </div>
+
+        <div id="roomPanel" class="room-panel hidden">
+          <div class="room-tile live"><span>▣</span><div><strong>Mi sala</strong><small id="roomCode">------</small></div><em id="peopleCount">0</em></div>
+          <div class="room-actions"><button id="copyCode" type="button">Copiar código</button><button id="leaveRoom" type="button">Salir</button></div>
+          <div class="room-meta"><span id="roomRole">Invitado</span><span id="connectedText">Conectado</span></div>
+        </div>
+      </section>
+
+      <section class="sidebar-section users-section">
+        <h3>USUARIOS EN LA SALA</h3>
+        <div id="people" class="people-list"><p class="sidebar-empty">Aún no estás en una sala.</p></div>
+      </section>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <form id="searchForm" class="top-search">
+          <span>⌕</span><input id="searchInput" placeholder="Buscar canciones, artistas o videos..." autocomplete="off"><button type="submit">Buscar</button>
+        </form>
+        <div class="top-actions"><button class="notification-btn" type="button" title="Notificaciones" aria-label="Notificaciones"><svg class="ui-icon"><use href="#i-bell"/></svg><span class="notification-dot"></span></button><button class="mini-profile" id="miniProfile" type="button" aria-label="Abrir perfil"><span class="avatar mini" id="miniAvatar">D</span><svg class="ui-icon profile-chevron"><use href="#i-chevron-down"/></svg></button></div>
+      </header>
+
+      <section class="video-stage" id="videoStage">
+        <div class="video-header"><div><span>REPRODUCIENDO AHORA</span><h2 id="videoStageTitle">Canción</h2></div><span id="roleBadge">Modo individual</span></div>
+        <div class="video-shell"><div id="youtubePlayer"></div><button id="activateAudioBtn" class="audio-unlock hidden" type="button">▶ Activar reproducción</button></div>
+      </section>
+
+      <section class="home-panel" id="homePanel">
+        <div class="hero-card">
+          <div class="hero-copy"><span>BIENVENIDO A</span><h1>Wave<span>Room</span></h1><p>Música en sincronía con tus amigos</p></div>
+          <div class="wave-art"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="feature-grid">
+            <article><b>⟳</b><div><strong>Sincronizado</strong><p>Todos escuchan al mismo tiempo</p></div></article>
+            <article><b>▥</b><div><strong>En tiempo real</strong><p>Chat y reacciones mientras escuchan</p></div></article>
+            <article><b>▶</b><div><strong>Sin límites</strong><p>Agrega canciones desde YouTube</p></div></article>
+          </div>
+        </div>
+
+        <section class="youtube-search-card" id="searchSection">
+          <div class="card-title"><span class="youtube-icon">▶</span><div><h2>Buscar música en YouTube</h2><p>Busca y agrega otra canción sin detener la que está sonando.</p></div></div>
+          <div class="search-clone"><input id="searchMirror" placeholder="Buscar canciones, artistas o videos..."><button id="searchMirrorBtn" type="button">Buscar</button></div>
+          <div id="searchStatus" class="search-status">Busca una canción para comenzar.</div>
+          <div id="searchResults" class="search-results"></div>
+          <details class="manual-link"><summary>Agregar con enlace de YouTube</summary><form id="videoForm"><input id="youtubeUrl" placeholder="Enlace de YouTube"><input id="videoTitle" placeholder="Nombre opcional"><button type="submit">Cargar</button></form></details>
+        </section>
+
+        <div class="popular"><h3>Búsquedas populares</h3><div><button data-query="Bad Bunny">Bad Bunny</button><button data-query="Mora">Mora</button><button data-query="Peso Pluma">Peso Pluma</button><button data-query="The Weeknd">The Weeknd</button><button data-query="Feid">Feid</button><button data-query="Karol G">Karol G</button></div></div>
+      </section>
+
+    </main>
+
+    <aside class="right-rail" id="rooms">
+      <section class="queue-widget">
+        <header><h2>Cola de reproducción</h2><span id="queueCount">0</span></header>
+        <div id="queue" class="queue-list"><div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div></div>
+      </section>
+
+      <section class="chat-widget">
+        <header><h2>Chat de la sala</h2><span><svg class="ui-icon"><use href="#i-users"/></svg><b id="chatCount">0</b></span></header>
+        <div id="messages" class="messages"><p class="empty-state">Entra a una sala para conversar.</p></div>
+        <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="400" placeholder="Escribe un mensaje..."><button type="submit">➤</button></form>
+      </section>
+    </aside>
+
+    <footer class="player-dock">
+      <div class="track-info"><div class="track-cover" id="trackCover">♫</div><div><strong id="nowPlaying">Ninguna canción</strong><span id="trackChannel">--</span></div></div>
+      <div class="dock-center">
+        <div class="dock-controls"><button id="syncBtn" type="button" title="Sincronizar"><svg class="ui-icon"><use href="#i-shuffle"/></svg></button><button id="previousBtn" type="button" title="Anterior" disabled><svg class="ui-icon"><use href="#i-prev"/></svg></button><button id="playBtn" class="main-play" type="button" title="Reproducir"><svg class="ui-icon"><use href="#i-play"/></svg></button><button id="pauseBtn" class="pause-overlay" type="button" title="Pausar"><svg class="ui-icon"><use href="#i-pause"/></svg></button><button id="nextBtn" type="button" title="Siguiente"><svg class="ui-icon"><use href="#i-next"/></svg></button><button id="queueBtn" type="button" title="Repetir"><svg class="ui-icon"><use href="#i-repeat"/></svg></button></div>
+        <div class="progress-row"><span id="currentTime">0:00</span><input id="progressBar" type="range" min="0" max="100" value="0"><span id="durationTime">0:00</span></div>
+      </div>
+      <div class="volume-area"><svg class="ui-icon"><use href="#i-volume"/></svg><input id="volumeBar" type="range" min="0" max="100" value="80" aria-label="Volumen"><button type="button" title="Ver cola"><svg class="ui-icon"><use href="#i-list"/></svg></button></div>
+    </footer>
+  </div>
+
+  <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-profile></div>
+    <section class="profile-modal-card">
+      <button class="modal-close" id="closeProfile" type="button">×</button>
+      <span class="eyebrow">PERSONALIZACIÓN</span><h2>Editar perfil</h2><p>Elige el nombre y la foto que verán los demás.</p>
+      <form id="profileForm" class="profile-form">
+        <div class="profile-photo-zone"><div id="profilePreview" class="avatar avatar-large">D</div><div><strong>Foto de perfil</strong><small>JPG, PNG o WEBP · máximo 2 MB</small><div class="photo-actions"><label for="profilePhoto">Elegir imagen</label><input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" hidden><button id="removePhoto" type="button">Quitar</button></div></div></div>
+        <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="David" placeholder="Tu nombre">
+        <div class="modal-actions"><button id="cancelProfile" type="button">Cancelar</button><button class="save-profile" type="submit">Guardar cambios</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

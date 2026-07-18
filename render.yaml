@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: waveroom
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: YOUTUBE_API_KEY
+        sync: false

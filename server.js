@@ -1,0 +1,409 @@
+require("dotenv").config();
+
+const express = require("express");
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// Ruta de salud para Render y otros servicios de monitoreo.
+app.get("/health", (_req, res) => {
+  res.status(200).json({ ok: true, service: "waveroom" });
+});
+
+app.get("/api/youtube/search", async (req, res) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  const query = String(req.query.q || "").trim().slice(0, 150);
+
+  if (!apiKey) {
+    return res.status(500).json({
+      error: "Falta configurar YOUTUBE_API_KEY en el servidor."
+    });
+  }
+
+  if (!query) {
+    return res.status(400).json({ error: "Escribe el nombre de una canción." });
+  }
+
+  try {
+    const params = new URLSearchParams({
+      part: "snippet",
+      type: "video",
+      videoCategoryId: "10",
+      maxResults: "10",
+      safeSearch: "moderate",
+      q: query,
+      key: apiKey
+    });
+
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?${params.toString()}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message =
+        data?.error?.message || "YouTube no pudo completar la búsqueda.";
+      return res.status(response.status).json({ error: message });
+    }
+
+    const results = (data.items || []).map(item => ({
+      id: item.id.videoId,
+      title: item.snippet.title,
+      channel: item.snippet.channelTitle,
+      thumbnail:
+        item.snippet.thumbnails?.medium?.url ||
+        item.snippet.thumbnails?.default?.url ||
+        `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`
+    }));
+
+    res.json({ results });
+  } catch (error) {
+    console.error("Error buscando en YouTube:", error);
+    res.status(500).json({ error: "No se pudo conectar con YouTube." });
+  }
+});
+
+app.use(express.static(path.join(__dirname, "public")));
+
+const rooms = new Map();
+
+function roomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code;
+  do {
+    code = Array.from({ length: 6 }, () =>
+      chars[Math.floor(Math.random() * chars.length)]
+    ).join("");
+  } while (rooms.has(code));
+  return code;
+}
+
+function currentRoomTime(room) {
+  if (!room.playing) return room.time;
+  return room.time + (Date.now() - room.updatedAt) / 1000;
+}
+
+function publicRoom(code, room) {
+  return {
+    code,
+    hostId: room.hostId,
+    users: [...room.users.entries()].map(([id, user]) => ({
+      id,
+      name: user.name,
+      avatar: user.avatar || ""
+    })),
+    video: room.video,
+    playing: room.playing,
+    time: currentRoomTime(room),
+    queue: room.queue,
+    waitingForQueue: room.waitingForQueue,
+    chat: room.chat.slice(-80)
+  };
+}
+
+function emitRoom(code) {
+  const room = rooms.get(code);
+  if (room) io.to(code).emit("room-state", publicRoom(code, room));
+}
+
+function removeFromRooms(socket) {
+  for (const [code, room] of rooms.entries()) {
+    if (!room.users.has(socket.id)) continue;
+
+    const leavingName = room.users.get(socket.id).name;
+    room.users.delete(socket.id);
+    socket.leave(code);
+
+    if (room.users.size === 0) {
+      rooms.delete(code);
+      continue;
+    }
+
+    if (room.hostId === socket.id) {
+      room.hostId = room.users.keys().next().value;
+      io.to(room.hostId).emit("became-host");
+    }
+
+    io.to(code).emit("system-message", `${leavingName} salió de la sala.`);
+    emitRoom(code);
+  }
+}
+
+io.on("connection", socket => {
+  socket.on("create-room", ({ name, avatar }, callback) => {
+    removeFromRooms(socket);
+    const code = roomCode();
+    const username = String(name || "Invitado").trim().slice(0, 30);
+
+    const room = {
+      hostId: socket.id,
+      users: new Map([[socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000) }]]),
+      video: null,
+      playing: false,
+      time: 0,
+      updatedAt: Date.now(),
+      queue: [],
+      waitingForQueue: false,
+      chat: []
+    };
+
+    rooms.set(code, room);
+    socket.join(code);
+    callback?.({ ok: true, socketId: socket.id, room: publicRoom(code, room) });
+  });
+
+  socket.on("join-room", ({ code, name, avatar }, callback) => {
+    removeFromRooms(socket);
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "La sala no existe." });
+
+    const username = String(name || "Invitado").trim().slice(0, 30);
+    room.users.set(socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000) });
+    socket.join(code);
+
+    socket.to(code).emit("system-message", `${username} entró a la sala.`);
+    callback?.({ ok: true, socketId: socket.id, room: publicRoom(code, room) });
+    emitRoom(code);
+  });
+
+  socket.on("update-profile", ({ code, name, avatar }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id)) {
+      return callback?.({ ok: false, error: "Sala no encontrada." });
+    }
+
+    const username = String(name || "Invitado").trim().slice(0, 30);
+    room.users.set(socket.id, {
+      name: username,
+      avatar: String(avatar || "").slice(0, 500000)
+    });
+    emitRoom(code);
+    callback?.({ ok: true });
+  });
+
+  socket.on("leave-room", ({ code }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (room?.users.has(socket.id)) {
+      const username = room.users.get(socket.id).name;
+      room.users.delete(socket.id);
+      socket.leave(code);
+
+      if (room.users.size === 0) {
+        rooms.delete(code);
+      } else {
+        if (room.hostId === socket.id) {
+          room.hostId = room.users.keys().next().value;
+          io.to(room.hostId).emit("became-host");
+        }
+        io.to(code).emit("system-message", `${username} salió de la sala.`);
+        emitRoom(code);
+      }
+    }
+
+    callback?.({ ok: true });
+  });
+
+  socket.on("set-video", ({ code, video }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (room.hostId !== socket.id) {
+      return callback?.({ ok: false, error: "Solo el anfitrión puede cambiar el video." });
+    }
+
+    room.video = {
+      id: String(video.id),
+      title: String(video.title || "Video de YouTube").slice(0, 120),
+      channel: String(video.channel || "YouTube").slice(0, 80),
+      thumbnail: String(video.thumbnail || `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`).slice(0, 500)
+    };
+    room.playing = true;
+    room.waitingForQueue = false;
+    room.time = 0;
+    room.updatedAt = Date.now();
+
+    io.to(code).emit("video-changed", {
+      video: room.video,
+      playing: true,
+      time: 0
+    });
+    emitRoom(code);
+    callback?.({ ok: true });
+  });
+
+  socket.on("player-action", ({ code, action, time }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (room.hostId !== socket.id) {
+      return callback?.({ ok: false, error: "Solo el anfitrión controla el video." });
+    }
+
+    const safeTime = Math.max(0, Number(time) || 0);
+
+    if (action === "play") {
+      room.time = safeTime;
+      room.playing = true;
+      room.waitingForQueue = false;
+    } else if (action === "pause") {
+      room.time = safeTime;
+      room.playing = false;
+    } else if (action === "seek") {
+      room.time = safeTime;
+    } else {
+      return callback?.({ ok: false, error: "Acción inválida." });
+    }
+
+    room.updatedAt = Date.now();
+
+    socket.to(code).emit("player-action", {
+      action,
+      time: safeTime,
+      serverTime: Date.now()
+    });
+
+    callback?.({ ok: true });
+  });
+
+  socket.on("request-sync", ({ code }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false });
+
+    callback?.({
+      ok: true,
+      video: room.video,
+      playing: room.playing,
+      time: currentRoomTime(room)
+    });
+  });
+
+  socket.on("add-queue", ({ code, video }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+
+    const item = {
+      id: String(video.id),
+      title: String(video.title || "Video de YouTube").slice(0, 120),
+      channel: String(video.channel || "YouTube").slice(0, 80),
+      thumbnail: String(video.thumbnail || `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`).slice(0, 500),
+      addedBy: room.users.get(socket.id)?.name || "Invitado"
+    };
+
+    // Si la canción anterior terminó con la cola vacía, la nueva canción
+    // se convierte inmediatamente en la canción activa y comienza para todos.
+    if (room.waitingForQueue || !room.video) {
+      room.video = item;
+      room.playing = true;
+      room.waitingForQueue = false;
+      room.time = 0;
+      room.updatedAt = Date.now();
+
+      io.to(code).emit("video-changed", {
+        video: room.video,
+        playing: true,
+        time: 0
+      });
+
+      emitRoom(code);
+      return callback?.({ ok: true, autoStarted: true });
+    }
+
+    room.queue.push(item);
+    emitRoom(code);
+    callback?.({ ok: true, autoStarted: false });
+  });
+
+  socket.on("next-video", ({ code }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (room.hostId !== socket.id) {
+      return callback?.({ ok: false, error: "Solo el anfitrión puede saltar." });
+    }
+
+    const video = room.queue.shift();
+
+    if (!video) {
+      // La canción terminó y no existe otra en cola. Marcamos la sala como
+      // esperando música para impedir que los clientes vuelvan a reproducir
+      // los últimos segundos durante la sincronización.
+      room.playing = false;
+      room.waitingForQueue = true;
+      room.video = null;
+      room.time = 0;
+      room.updatedAt = Date.now();
+
+      io.to(code).emit("queue-ended");
+      emitRoom(code);
+      return callback?.({ ok: true, stopped: true });
+    }
+
+    room.video = video;
+    room.playing = true;
+    room.waitingForQueue = false;
+    room.time = 0;
+    room.updatedAt = Date.now();
+
+    io.to(code).emit("video-changed", {
+      video,
+      playing: true,
+      time: 0
+    });
+
+    emitRoom(code);
+    callback?.({ ok: true });
+  });
+
+  socket.on("chat", ({ code, text }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+
+    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+
+    text = String(text || "").trim().slice(0, 400);
+    if (!text) return callback?.({ ok: false });
+
+    const message = {
+      author: room.users.get(socket.id)?.name || "Invitado",
+      text,
+      createdAt: Date.now()
+    };
+
+    room.chat.push(message);
+    io.to(code).emit("chat", message);
+    callback?.({ ok: true });
+  });
+
+  socket.on("disconnect", () => removeFromRooms(socket));
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`WaveRoom YouTube iniciado en http://localhost:${PORT}`);
+
+  if (process.env.YOUTUBE_API_KEY) {
+    console.log("✅ YouTube API Key cargada correctamente.");
+  } else {
+    console.log("❌ No se encontró YOUTUBE_API_KEY.");
+  }
+});
