@@ -588,13 +588,41 @@ async function searchYouTube(query) {
   }
 }
 
+async function videoFromYouTubeLink(value) {
+  const id = parseYouTubeId(value);
+  if (!id) return null;
+
+  const response = await fetch(`/api/youtube/video?id=${encodeURIComponent(id)}`);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo obtener la información del video.");
+  }
+
+  return data.video;
+}
+
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   const query = $("searchInput").value.trim();
   $("searchMirror").value = query;
 
   if (!query) {
-    return notify("Escribe el nombre de una canción.");
+    return notify("Escribe una canción o pega un enlace de YouTube.");
+  }
+
+  const youtubeId = parseYouTubeId(query);
+  if (youtubeId) {
+    try {
+      const video = await videoFromYouTubeLink(query);
+      addVideoToQueue(video);
+      $("searchInput").value = "";
+      $("searchMirror").value = "";
+      $("searchStatus").textContent = `Enlace agregado a la cola: ${video.title}`;
+    } catch (error) {
+      notify(error.message);
+    }
+    return;
   }
 
   await searchYouTube(query);
@@ -612,10 +640,23 @@ function selectedVideo() {
 
 $("videoForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const video = selectedVideo();
+  const value = $("youtubeUrl").value.trim();
 
-  if (!video) return notify("El enlace de YouTube no es válido.");
-  await startSelectedVideo(video);
+  if (!parseYouTubeId(value)) {
+    return notify("El enlace de YouTube no es válido.");
+  }
+
+  try {
+    const video = await videoFromYouTubeLink(value);
+    const customTitle = $("videoTitle").value.trim();
+    if (customTitle) video.title = customTitle;
+
+    addVideoToQueue(video);
+    $("youtubeUrl").value = "";
+    $("videoTitle").value = "";
+  } catch (error) {
+    notify(error.message);
+  }
 });
 
 $("playBtn").addEventListener("click", async () => {

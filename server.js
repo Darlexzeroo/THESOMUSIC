@@ -18,6 +18,59 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "waveroom" });
 });
 
+app.get("/api/youtube/video", async (req, res) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  const id = String(req.query.id || "").trim();
+
+  if (!apiKey) {
+    return res.status(500).json({
+      error: "Falta configurar YOUTUBE_API_KEY en el servidor."
+    });
+  }
+
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+    return res.status(400).json({ error: "El enlace de YouTube no es válido." });
+  }
+
+  try {
+    const params = new URLSearchParams({
+      part: "snippet",
+      id,
+      key: apiKey
+    });
+
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?${params.toString()}`
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message = data?.error?.message || "YouTube no pudo obtener el video.";
+      return res.status(response.status).json({ error: message });
+    }
+
+    const item = data.items?.[0];
+    if (!item) {
+      return res.status(404).json({ error: "No se encontró el video de YouTube." });
+    }
+
+    return res.json({
+      video: {
+        id,
+        title: item.snippet.title,
+        channel: item.snippet.channelTitle,
+        thumbnail:
+          item.snippet.thumbnails?.medium?.url ||
+          item.snippet.thumbnails?.default?.url ||
+          `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+      }
+    });
+  } catch (error) {
+    console.error("Error obteniendo video de YouTube:", error);
+    return res.status(500).json({ error: "No se pudo conectar con YouTube." });
+  }
+});
+
 app.get("/api/youtube/search", async (req, res) => {
   const apiKey = process.env.YOUTUBE_API_KEY;
   const query = String(req.query.q || "").trim().slice(0, 150);
