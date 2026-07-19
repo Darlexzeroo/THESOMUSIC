@@ -34,6 +34,7 @@ let activePrivateUserId = null;
 let activePrivateClientId = null;
 let savedPrivateContacts = [];
 const privateUnread = new Map();
+const privateMessageCache = new Map();
 let privateCallPeer = null;
 let privateCallTargetId = null;
 let incomingPrivateCallerId = null;
@@ -477,6 +478,47 @@ function renderFriendsList() {
   });
 }
 
+
+function mergePrivateMessages(clientId, messages = []) {
+  if (!clientId) return [];
+  const current = privateMessageCache.get(clientId) || [];
+  const merged = new Map();
+  [...current, ...messages].forEach(message => {
+    if (!message) return;
+    const key = message.id || `${message.fromClientId || message.from || ""}-${message.createdAt || ""}-${message.text || ""}-${message.image || ""}`;
+    merged.set(key, message);
+  });
+  const sorted = [...merged.values()].sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0)).slice(-150);
+  privateMessageCache.set(clientId, sorted);
+  return sorted;
+}
+
+function loadPrivateConversations(callback) {
+  if (!socket.connected) {
+    renderFriendsList();
+    callback?.({ ok: false, error: "Socket desconectado." });
+    return;
+  }
+
+  socket.emit("private-conversations", { clientId: persistentClientId }, response => {
+    if (!response?.ok) {
+      console.warn("No se pudieron cargar las conversaciones privadas:", response?.error || "Error desconocido");
+      renderFriendsList();
+      callback?.(response);
+      return;
+    }
+
+    const existing = new Map(savedPrivateContacts.map(contact => [contact.clientId, contact]));
+    (response.contacts || []).forEach(contact => {
+      if (!contact?.clientId || contact.clientId === persistentClientId) return;
+      existing.set(contact.clientId, { ...(existing.get(contact.clientId) || {}), ...contact });
+    });
+    savedPrivateContacts = [...existing.values()];
+    renderFriendsList();
+    callback?.(response);
+  });
+}
+
 function renderPrivateMessages(messages = []) {
   const box = $("privateMessages");
   box.innerHTML = messages.length ? messages.map(message => {
@@ -508,11 +550,13 @@ function openPrivateChatByClient(clientId) {
   const avatar = $("privateChatAvatar");
   avatar.textContent = user.avatar ? "" : (user.name?.[0]?.toUpperCase() || "?");
   avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
-  renderPrivateMessages([]);
+  const cachedMessages = privateMessageCache.get(clientId) || [];
+  renderPrivateMessages(cachedMessages);
 
   socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: clientId }, response => {
     if (!response?.ok || activePrivateClientId !== clientId) return;
-    renderPrivateMessages(response.messages || []);
+    const messages = mergePrivateMessages(clientId, response.messages || []);
+    renderPrivateMessages(messages);
     $("privateChatInput").focus();
   });
 }
@@ -2041,6 +2085,7 @@ socket.on("private-call-end", ({ from }) => {
 socket.on("private-message-notification", message => {
   if (!message || message.fromClientId === persistentClientId) return;
   const otherClientId = message.fromClientId;
+  mergePrivateMessages(otherClientId, [message]);
   const privateChatIsOpen = activePrivateClientId === otherClientId && !$("friendsModal").classList.contains("hidden");
 
   // Si la conversación está cerrada, también se marca como no leída.
@@ -2061,12 +2106,18 @@ socket.on("private-message-notification", message => {
 });
 
 socket.on("private-chat-global", message => {
+  if (!message) return;
   const otherClientId = message.fromClientId === persistentClientId ? message.toClientId : message.fromClientId;
+  const messages = mergePrivateMessages(otherClientId, [message]);
   const privateChatIsOpen = activePrivateClientId === otherClientId && !$("friendsModal").classList.contains("hidden");
 
+  // Se pinta directamente desde el mensaje recibido, sin esperar otra escritura
+  // ni una segunda consulta al servidor. Después se sincroniza el historial.
   if (privateChatIsOpen) {
+    renderPrivateMessages(messages);
     socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: otherClientId }, response => {
-      if (response?.ok && activePrivateClientId === otherClientId) renderPrivateMessages(response.messages || []);
+      if (!response?.ok || activePrivateClientId !== otherClientId) return;
+      renderPrivateMessages(mergePrivateMessages(otherClientId, response.messages || []));
     });
   }
   loadPrivateConversations();
