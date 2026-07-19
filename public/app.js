@@ -31,6 +31,8 @@ let voiceMeterFrame = null;
 let voiceOutputVolume = Math.max(0, Math.min(100, Number(localStorage.getItem("waveroom-voice-volume") ?? 100)));
 let voiceNoiseFilterEnabled = localStorage.getItem("waveroom-voice-noise-filter") !== "false";
 let activePrivateUserId = null;
+let activePrivateClientId = null;
+let savedPrivateContacts = [];
 const privateUnread = new Map();
 let privateCallPeer = null;
 let privateCallTargetId = null;
@@ -66,16 +68,24 @@ function ensureNotificationCenter() {
     unreadAppNotifications = 0;
     updateNotificationBell();
     renderNotifications();
+    updateDocumentTitle();
   });
   return center;
 }
 
 function updateNotificationBell() {
   const dot = document.querySelector(".notification-dot");
+  const button = document.querySelector(".notification-btn");
   if (!dot) return;
   dot.textContent = unreadAppNotifications ? String(Math.min(99, unreadAppNotifications)) : "";
   dot.classList.toggle("has-count", unreadAppNotifications > 0);
   dot.classList.toggle("hidden", unreadAppNotifications === 0);
+  button?.classList.toggle("has-unread-notifications", unreadAppNotifications > 0);
+  if (button) {
+    button.title = unreadAppNotifications > 0
+      ? `${unreadAppNotifications} notificación${unreadAppNotifications === 1 ? "" : "es"} sin leer`
+      : "Notificaciones";
+  }
 }
 
 function renderNotifications() {
@@ -88,16 +98,102 @@ function renderNotifications() {
     const item = appNotifications[Number(button.dataset.notificationIndex)];
     ensureNotificationCenter().classList.add("hidden");
     if (item?.openFriends) openFriendsModal();
-    if (item?.userId) setTimeout(() => openPrivateChat(item.userId), 80);
+    if (item?.clientId) setTimeout(() => openPrivateChatByClient(item.clientId), 80);
+    else if (item?.userId) setTimeout(() => openPrivateChat(item.userId), 80);
   }));
 }
 
 function addFriendsNotification(title, text, options = {}) {
-  appNotifications.unshift({ title, text, icon: options.icon || "👥", openFriends: true, userId: options.userId || null });
+  appNotifications.unshift({ title, text, icon: options.icon || "👥", openFriends: true, userId: options.userId || null, clientId: options.clientId || null });
   if (appNotifications.length > 30) appNotifications.length = 30;
   unreadAppNotifications += 1;
   updateNotificationBell();
   renderNotifications();
+  updateDocumentTitle();
+}
+
+let notificationAudioContext = null;
+let notificationToastTimer = null;
+const originalDocumentTitle = document.title;
+
+function updateDocumentTitle() {
+  document.title = unreadAppNotifications > 0
+    ? `(${Math.min(99, unreadAppNotifications)}) ${originalDocumentTitle}`
+    : originalDocumentTitle;
+}
+
+function playPrivateMessageSound() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    notificationAudioContext ||= new AudioContextClass();
+    if (notificationAudioContext.state === "suspended") notificationAudioContext.resume().catch(() => {});
+    const now = notificationAudioContext.currentTime;
+    const oscillator = notificationAudioContext.createOscillator();
+    const gain = notificationAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(740, now);
+    oscillator.frequency.exponentialRampToValueAtTime(980, now + 0.12);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.11, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.23);
+    oscillator.connect(gain).connect(notificationAudioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.24);
+  } catch {}
+}
+
+function ensurePrivateMessageToast() {
+  let element = document.getElementById("privateMessageToast");
+  if (element) return element;
+  element = document.createElement("button");
+  element.id = "privateMessageToast";
+  element.type = "button";
+  element.className = "private-message-toast hidden";
+  document.body.appendChild(element);
+  return element;
+}
+
+function showPrivateMessageToast(message, otherClientId) {
+  const element = ensurePrivateMessageToast();
+  const preview = message.text || "Envió una imagen";
+  const initial = String(message.author || "U").trim().charAt(0).toUpperCase() || "U";
+  element.innerHTML = `
+    <span class="private-toast-avatar">${escapeHtml(initial)}</span>
+    <span class="private-toast-copy"><strong>${escapeHtml(message.author || "Usuario")}</strong><span>${escapeHtml(preview)}</span></span>
+    <span class="private-toast-open">Abrir</span>`;
+  element.onclick = () => {
+    element.classList.add("hidden");
+    openFriendsModal();
+    setTimeout(() => openPrivateChatByClient(otherClientId), 60);
+  };
+  element.classList.remove("hidden");
+  clearTimeout(notificationToastTimer);
+  notificationToastTimer = setTimeout(() => element.classList.add("hidden"), 6000);
+}
+
+function showNativePrivateNotification(message, otherClientId) {
+  if (!("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;
+  try {
+    const notification = new Notification(`Mensaje de ${message.author || "Usuario"}`, {
+      body: message.text || "Te envió una imagen",
+      tag: `waveroom-private-${otherClientId}`,
+      renotify: true,
+      silent: true
+    });
+    notification.onclick = () => {
+      window.focus();
+      openFriendsModal();
+      setTimeout(() => openPrivateChatByClient(otherClientId), 60);
+      notification.close();
+    };
+    setTimeout(() => notification.close(), 9000);
+  } catch {}
+}
+
+function requestBrowserNotifications() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  Notification.requestPermission().catch(() => {});
 }
 
 function setupNotificationBell() {
@@ -107,12 +203,14 @@ function setupNotificationBell() {
   updateNotificationBell();
   button.addEventListener("click", event => {
     event.stopPropagation();
+    requestBrowserNotifications();
     const center = ensureNotificationCenter();
     center.classList.toggle("hidden");
     if (!center.classList.contains("hidden")) {
       unreadAppNotifications = 0;
       updateNotificationBell();
       renderNotifications();
+      updateDocumentTitle();
     }
   });
   document.addEventListener("click", () => ensureNotificationCenter().classList.add("hidden"));
@@ -132,6 +230,27 @@ function getName() {
 
 function getProfile() {
   return { name: getName(), avatar: profilePhotoData, clientId: persistentClientId };
+}
+
+// Registra esta instalación del navegador en un canal persistente del servidor.
+// Este registro es indispensable para que los mensajes privados lleguen en tiempo real,
+// aunque el usuario no esté dentro de una sala musical.
+function registerPersistentClient(callback) {
+  if (!socket.connected || !persistentClientId) {
+    callback?.({ ok: false, error: "Socket desconectado." });
+    return;
+  }
+
+  socket.emit("register-client", {
+    clientId: persistentClientId,
+    name: getName(),
+    avatar: profilePhotoData
+  }, response => {
+    if (!response?.ok) {
+      console.warn("No se pudo registrar el cliente persistente:", response?.error || "Error desconocido");
+    }
+    callback?.(response);
+  });
 }
 
 function applyAvatar(element, name = getName(), avatar = profilePhotoData) {
@@ -292,20 +411,37 @@ function endPrivateCall(notifyServer = true) {
 
 function openFriendsModal() {
   $("friendsModal").classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  document.body.classList.add("modal-open", "friends-open");
+  document.documentElement.classList.add("friends-open");
+  loadPrivateConversations();
   renderFriendsList();
 }
 
 function closeFriendsModal() {
+  if (privateCallTargetId || privateCallActive) endPrivateCall(true);
+  rejectPrivateCallInvite();
   $("friendsModal").classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  document.body.classList.remove("modal-open", "friends-open");
+  document.documentElement.classList.remove("friends-open");
 }
 
 function updatePrivateUnreadBadge() {
   const total = [...privateUnread.values()].reduce((sum, value) => sum + value, 0);
   const badge = $("privateUnreadBadge");
-  badge.textContent = total > 99 ? "99+" : String(total);
+  const friendsButton = $("friendsShortcut");
+  if (!badge) return;
+
+  // En "Amigos" se muestra solamente un punto verde, no un número.
+  badge.textContent = "";
   badge.classList.toggle("hidden", total === 0);
+  badge.setAttribute("aria-label", total > 0 ? `${total} mensaje${total === 1 ? "" : "s"} privado${total === 1 ? "" : "s"} sin leer` : "");
+
+  if (friendsButton) {
+    friendsButton.classList.toggle("has-private-unread", total > 0);
+    friendsButton.title = total > 0
+      ? `${total} mensaje${total === 1 ? "" : "s"} privado${total === 1 ? "" : "s"} sin leer`
+      : "Amigos";
+  }
 }
 
 function getRoomUser(id) {
@@ -313,33 +449,38 @@ function getRoomUser(id) {
 }
 
 function renderFriendsList() {
-  const users = currentRoom?.users || [];
+  const roomUsers = (currentRoom?.users || []).filter(user => user.id !== mySocketId).map(user => ({
+    socketId: user.id,
+    clientId: user.clientId || user.id,
+    name: user.name,
+    avatar: user.avatar || "",
+    online: true,
+    inRoom: true,
+    host: user.id === currentRoom?.hostId
+  }));
+  const merged = new Map(savedPrivateContacts.map(contact => [contact.clientId, { ...contact, socketId: contact.socketId || null, inRoom: false }]));
+  roomUsers.forEach(user => merged.set(user.clientId, { ...(merged.get(user.clientId) || {}), ...user }));
+  const users = [...merged.values()].filter(user => user.clientId && user.clientId !== persistentClientId);
   $("friendsCount").textContent = users.length;
-
-  if (!currentRoom) {
-    $("friendsList").innerHTML = '<p class="friends-empty">Entra a una sala para ver a tus amigos.</p>';
-    return;
-  }
-
-  $("friendsList").innerHTML = users.map(user => {
-    const isMe = user.id === mySocketId;
-    const unread = privateUnread.get(user.id) || 0;
-    return `<button class="friend-row${activePrivateUserId === user.id ? " active" : ""}" type="button" data-friend-id="${escapeHtml(user.id)}" ${isMe ? "disabled" : ""}>
-      <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name[0]?.toUpperCase() || "?")}</span>
-      <span><strong>${escapeHtml(user.name)}${isMe ? " · Tú" : ""}</strong><small>${user.id === currentRoom.hostId ? "Anfitrión" : "En la sala"}</small></span>
+  $("friendsList").innerHTML = users.length ? users.map(user => {
+    const unread = privateUnread.get(user.clientId) || 0;
+    const selected = activePrivateClientId === user.clientId;
+    return `<button class="friend-row${selected ? " active" : ""}" type="button" data-friend-client="${escapeHtml(user.clientId)}">
+      <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>
+      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small>${user.inRoom ? (user.host ? "Anfitrión · En la sala" : "En la sala") : (user.online ? "En línea" : "Sin conexión")}</small></span>
       ${unread ? `<b class="friend-unread">${unread > 99 ? "99+" : unread}</b>` : ""}
     </button>`;
-  }).join("");
+  }).join("") : '<p class="friends-empty">Tus conversaciones privadas aparecerán aquí, incluso cuando no estés en una sala.</p>';
 
-  $("friendsList").querySelectorAll("[data-friend-id]:not([disabled])").forEach(button => {
-    button.addEventListener("click", () => openPrivateChat(button.dataset.friendId));
+  $("friendsList").querySelectorAll("[data-friend-client]").forEach(button => {
+    button.addEventListener("click", () => openPrivateChatByClient(button.dataset.friendClient));
   });
 }
 
 function renderPrivateMessages(messages = []) {
   const box = $("privateMessages");
   box.innerHTML = messages.length ? messages.map(message => {
-    const mine = message.from === mySocketId;
+    const mine = message.fromClientId ? message.fromClientId === persistentClientId : message.from === mySocketId;
     const time = new Date(message.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return `<div class="private-message ${mine ? "mine" : "theirs"}">${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}<small>${time}</small></div>`;
   }).join("") : '<p class="private-chat-hint">Todavía no hay mensajes. Envía el primero.</p>';
@@ -347,33 +488,43 @@ function renderPrivateMessages(messages = []) {
   box.scrollTop = box.scrollHeight;
 }
 
-function openPrivateChat(userId) {
-  const user = getRoomUser(userId);
-  if (!user || userId === mySocketId) return;
+function openPrivateChatByClient(clientId) {
+  const roomUser = currentRoom?.users?.find(user => (user.clientId || user.id) === clientId);
+  const saved = savedPrivateContacts.find(user => user.clientId === clientId);
+  const user = roomUser ? { ...roomUser, socketId: roomUser.id, clientId: roomUser.clientId || roomUser.id, online: true } : saved;
+  if (!user || clientId === persistentClientId) return;
 
-  activePrivateUserId = userId;
-  privateUnread.delete(userId);
+  activePrivateClientId = clientId;
+  activePrivateUserId = user.socketId || null;
+  privateUnread.delete(clientId);
   updatePrivateUnreadBadge();
   renderFriendsList();
   $("privateChatEmpty").classList.add("hidden");
   $("privateChatActive").classList.remove("hidden");
-  $("privateChatName").textContent = user.name;
+  $("privateChatName").textContent = user.name || "Usuario";
+  $("privateCallBtn").disabled = !activePrivateUserId || !currentRoom;
+  $("privateCallBtn").title = activePrivateUserId && currentRoom ? "Llamar en privado" : "La llamada requiere que ambos estén en la misma sala";
+  $("privateCallStatus").textContent = activePrivateUserId && currentRoom ? "Chat privado · Disponible para llamada" : "Chat privado guardado";
   const avatar = $("privateChatAvatar");
-  avatar.textContent = user.avatar ? "" : (user.name[0]?.toUpperCase() || "?");
+  avatar.textContent = user.avatar ? "" : (user.name?.[0]?.toUpperCase() || "?");
   avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
   renderPrivateMessages([]);
 
-  socket.emit("private-chat-history", { code: currentRoom.code, target: userId }, response => {
-    if (!response?.ok || activePrivateUserId !== userId) return;
+  socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: clientId }, response => {
+    if (!response?.ok || activePrivateClientId !== clientId) return;
     renderPrivateMessages(response.messages || []);
     $("privateChatInput").focus();
   });
 }
 
+function openPrivateChat(userId) {
+  const user = getRoomUser(userId);
+  if (user) openPrivateChatByClient(user.clientId || user.id);
+}
+
 function resetPrivateChat() {
   activePrivateUserId = null;
-  privateUnread.clear();
-  updatePrivateUnreadBadge();
+  activePrivateClientId = null;
   $("privateChatEmpty").classList.remove("hidden");
   $("privateChatActive").classList.add("hidden");
   $("privateMessages").innerHTML = "";
@@ -637,7 +788,7 @@ function renderRoom(room) {
   $("queueCount").textContent = room.queue.length;
   $("chatCount").textContent = room.users.length;
   renderFriendsList();
-  if (activePrivateUserId && !room.users.some(user => user.id === activePrivateUserId)) resetPrivateChat();
+  if (activePrivateClientId) { const active = room.users.find(user => (user.clientId || user.id) === activePrivateClientId); activePrivateUserId = active?.id || null; }
   $("queue").innerHTML = room.queue.length ? room.queue.map(video => `
     <div class="queue-item">
       <img src="${video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}" alt="">
@@ -667,6 +818,7 @@ function renderRoom(room) {
     $("messages").innerHTML = "";
     room.chat.forEach(addMessage);
     $("messages").dataset.loaded = "1";
+    scrollRoomChatToBottom("auto");
   }
 
   updateVoiceUsers(room.voiceUsers || []);
@@ -684,8 +836,9 @@ function resetRoomUI() {
   $("chatCount").textContent = "0";
   $("queue").innerHTML = `<div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div>`;
   $("messages").innerHTML = `<p class="muted">Entra a una sala para conversar.</p>`;
-  resetPrivateChat();
-  closeFriendsModal();
+  if (privateCallTargetId || privateCallActive) endPrivateCall(true);
+  activePrivateUserId = null;
+  loadPrivateConversations();
   delete $("messages").dataset.loaded;
   clearInterval(syncInterval);
 }
@@ -1193,14 +1346,30 @@ async function sendRoomImage(file) {
 }
 
 async function sendPrivateImage(file) {
-  if (!currentRoom || !activePrivateUserId) return notify("Selecciona una persona de la sala.");
+  if (!activePrivateClientId) return notify("Selecciona una conversación privada.");
   try {
     notify("Preparando imagen...");
     const image = await prepareChatImage(file);
-    socket.emit("private-chat", { code: currentRoom.code, target: activePrivateUserId, text: "", image }, response => {
+    socket.emit("private-chat-global", { clientId: persistentClientId, targetClientId: activePrivateClientId, text: "", image }, response => {
       if (!response?.ok) notify(response?.error || "No se pudo enviar la imagen.");
     });
   } catch (error) { notify(error.message); }
+}
+
+function scrollRoomChatToBottom(behavior = "smooth") {
+  const box = $("messages");
+  if (!box) return;
+  const move = () => {
+    try {
+      box.scrollTo({ top: box.scrollHeight, behavior });
+    } catch (_) {
+      box.scrollTop = box.scrollHeight;
+    }
+  };
+  requestAnimationFrame(() => {
+    move();
+    requestAnimationFrame(move);
+  });
 }
 
 function addMessage(message) {
@@ -1211,13 +1380,16 @@ function addMessage(message) {
     div.className = "message";
     div.innerHTML = `<strong>${escapeHtml(message.author)}</strong>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
     bindChatImages(div);
+    div.querySelectorAll("img").forEach(img => {
+      if (!img.complete) img.addEventListener("load", () => scrollRoomChatToBottom("auto"), { once: true });
+    });
   } else {
     div.className = "system";
     div.textContent = message.text;
   }
 
   $("messages").appendChild(div);
-  $("messages").scrollTop = $("messages").scrollHeight;
+  scrollRoomChatToBottom();
 }
 
 
@@ -1599,6 +1771,13 @@ $("focusRooms").addEventListener("click", () => {
 });
 
 setupNotificationBell();
+window.addEventListener("pointerdown", () => {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !notificationAudioContext) notificationAudioContext = new AudioContextClass();
+    notificationAudioContext?.resume?.().catch(() => {});
+  } catch {}
+}, { once: true });
 
 $("friendsShortcut").addEventListener("click", openFriendsModal);
 $("closeFriends").addEventListener("click", closeFriendsModal);
@@ -1627,13 +1806,19 @@ $("rejectPrivateCall").addEventListener("click", rejectPrivateCallInvite);
 
 $("privateChatForm").addEventListener("submit", event => {
   event.preventDefault();
-  if (!currentRoom || !activePrivateUserId) return notify("Selecciona una persona de la sala.");
+  if (!activePrivateClientId) return notify("Selecciona una conversación privada.");
   const input = $("privateChatInput");
   const text = input.value.trim();
   if (!text) return;
-  socket.emit("private-chat", { code: currentRoom.code, target: activePrivateUserId, text }, response => {
-    if (response?.ok) input.value = "";
-    else notify(response?.error || "No se pudo enviar el mensaje privado.");
+  const targetClientId = activePrivateClientId;
+  socket.emit("private-chat-global", { clientId: persistentClientId, targetClientId, text }, response => {
+    if (!response?.ok) return notify(response?.error || "No se pudo enviar el mensaje privado.");
+    input.value = "";
+    // Refresca inmediatamente el historial del remitente, incluso si el evento
+    // de Socket.IO tarda unos milisegundos o la conexión acaba de recuperarse.
+    socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId }, history => {
+      if (history?.ok && activePrivateClientId === targetClientId) renderPrivateMessages(history.messages || []);
+    });
   });
 });
 
@@ -1699,6 +1884,18 @@ document.addEventListener("keydown", event => {
 socket.on("connect", () => {
   mySocketId = socket.id;
   $("connectedText").textContent = "Conectado";
+
+  // Primero se une el socket al canal client:<id>. Solo después se cargan
+  // conversaciones e historial, evitando la carrera que impedía recibir mensajes
+  // hasta que el destinatario enviaba uno.
+  registerPersistentClient(() => {
+    loadPrivateConversations();
+    if (activePrivateClientId) {
+      socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: activePrivateClientId }, response => {
+        if (response?.ok && activePrivateClientId) renderPrivateMessages(response.messages || []);
+      });
+    }
+  });
 });
 
 socket.on("disconnect", () => {
@@ -1839,20 +2036,40 @@ socket.on("private-call-end", ({ from }) => {
   if (from === privateCallTargetId) { notify("La llamada privada terminó."); endPrivateCall(false); }
 });
 
-socket.on("private-chat", message => {
-  const otherId = message.from === mySocketId ? message.to : message.from;
-  if (activePrivateUserId === otherId && !$("friendsModal").classList.contains("hidden")) {
-    const current = [...$("privateMessages").querySelectorAll(".private-message")].map(() => null);
-    socket.emit("private-chat-history", { code: currentRoom?.code, target: otherId }, response => {
-      if (response?.ok && activePrivateUserId === otherId) renderPrivateMessages(response.messages || []);
-    });
-  } else if (message.from !== mySocketId) {
-    privateUnread.set(otherId, (privateUnread.get(otherId) || 0) + 1);
+// El servidor envía este evento únicamente al destinatario. Así el aviso
+// aparece siempre, incluso cuando la conversación ya está abierta.
+socket.on("private-message-notification", message => {
+  if (!message || message.fromClientId === persistentClientId) return;
+  const otherClientId = message.fromClientId;
+  const privateChatIsOpen = activePrivateClientId === otherClientId && !$("friendsModal").classList.contains("hidden");
+
+  // Si la conversación está cerrada, también se marca como no leída.
+  if (!privateChatIsOpen) {
+    privateUnread.set(otherClientId, (privateUnread.get(otherClientId) || 0) + 1);
     updatePrivateUnreadBadge();
-    renderFriendsList();
-    addFriendsNotification("Mensaje privado", `${message.author || "Un usuario"} te envió un mensaje.`, { icon: message.image ? "🖼️" : "💬", userId: otherId });
-    notify(`Mensaje privado de ${message.author || "un usuario"}.`);
   }
+
+  addFriendsNotification(
+    "Nuevo mensaje privado",
+    `${message.author || "Usuario"}: ${message.text || "Envió una imagen"}`,
+    { icon: "💬", userId: message.fromSocketId || null, clientId: otherClientId }
+  );
+  showPrivateMessageToast(message, otherClientId);
+  playPrivateMessageSound();
+  showNativePrivateNotification(message, otherClientId);
+  renderFriendsList();
+});
+
+socket.on("private-chat-global", message => {
+  const otherClientId = message.fromClientId === persistentClientId ? message.toClientId : message.fromClientId;
+  const privateChatIsOpen = activePrivateClientId === otherClientId && !$("friendsModal").classList.contains("hidden");
+
+  if (privateChatIsOpen) {
+    socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: otherClientId }, response => {
+      if (response?.ok && activePrivateClientId === otherClientId) renderPrivateMessages(response.messages || []);
+    });
+  }
+  loadPrivateConversations();
 });
 
 socket.on("chat", addMessage);

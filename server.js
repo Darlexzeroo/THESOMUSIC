@@ -108,6 +108,8 @@ app.get("/api/youtube/info", async (req, res) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
+const connectedClients = new Map(); // clientId -> { socketId, name, avatar }
+const socketClients = new Map(); // socketId -> clientId
 const PRIVATE_MESSAGES_FILE = path.join(__dirname, "private-messages.json");
 let persistentPrivateChats = {};
 try {
@@ -125,6 +127,26 @@ function safeClientId(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
 }
 function persistentChatKey(a, b) { return [safeClientId(a), safeClientId(b)].sort().join(":"); }
+function getContactMeta(clientId) {
+  const live = connectedClients.get(clientId);
+  const saved = persistentPrivateChats.__contacts?.[clientId] || {};
+  return {
+    clientId,
+    socketId: live?.socketId || null,
+    name: live?.name || saved.name || "Usuario",
+    avatar: live?.avatar || saved.avatar || "",
+    online: Boolean(live)
+  };
+}
+function rememberContact(clientId, name, avatar) {
+  if (!clientId) return;
+  persistentPrivateChats.__contacts ||= {};
+  persistentPrivateChats.__contacts[clientId] = {
+    name: String(name || "Usuario").slice(0, 30),
+    avatar: String(avatar || "").slice(0, 500000)
+  };
+  savePersistentPrivateChats();
+}
 
 function sanitizeChatImage(value) {
   if (!value || typeof value !== "object") return null;
@@ -202,6 +224,85 @@ function removeFromRooms(socket) {
 }
 
 io.on("connection", socket => {
+  socket.on("register-client", ({ clientId, name, avatar } = {}, callback) => {
+    clientId = safeClientId(clientId);
+    if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
+
+    // Si este socket se registró antes con otra identidad, sale del canal anterior.
+    const previousClientId = socketClients.get(socket.id);
+    if (previousClientId && previousClientId !== clientId) {
+      socket.leave(`client:${previousClientId}`);
+      const previousProfile = connectedClients.get(previousClientId);
+      if (previousProfile?.socketId === socket.id) connectedClients.delete(previousClientId);
+    }
+
+    const profile = { socketId: socket.id, name: String(name || "Usuario").trim().slice(0, 30), avatar: String(avatar || "").slice(0, 500000) };
+    connectedClients.set(clientId, profile);
+    socketClients.set(socket.id, clientId);
+    socket.join(`client:${clientId}`);
+    rememberContact(clientId, profile.name, profile.avatar);
+    callback?.({ ok: true, clientId });
+  });
+
+  socket.on("private-conversations", ({ clientId } = {}, callback) => {
+    clientId = safeClientId(clientId || socketClients.get(socket.id));
+    if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
+    const ids = new Set();
+    for (const [key, messages] of Object.entries(persistentPrivateChats)) {
+      if (key === "__contacts" || !Array.isArray(messages)) continue;
+      const parts = key.split(":");
+      if (parts.includes(clientId)) parts.filter(id => id !== clientId).forEach(id => ids.add(id));
+    }
+    callback?.({ ok: true, contacts: [...ids].map(getContactMeta).sort((a,b) => Number(b.online)-Number(a.online) || a.name.localeCompare(b.name)) });
+  });
+
+  socket.on("private-chat-history-global", ({ clientId, targetClientId } = {}, callback) => {
+    clientId = safeClientId(clientId || socketClients.get(socket.id));
+    targetClientId = safeClientId(targetClientId);
+    if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
+    callback?.({ ok: true, messages: persistentPrivateChats[persistentChatKey(clientId, targetClientId)] || [] });
+  });
+
+  socket.on("private-chat-global", ({ clientId, targetClientId, text, image } = {}, callback) => {
+    clientId = safeClientId(clientId || socketClients.get(socket.id));
+    targetClientId = safeClientId(targetClientId);
+    if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "Conversación no válida." });
+    text = String(text || "").trim().slice(0, 400);
+    image = sanitizeChatImage(image);
+    if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
+    const senderLive = connectedClients.get(clientId);
+    const senderMeta = getContactMeta(clientId);
+    const targetMeta = getContactMeta(targetClientId);
+    rememberContact(clientId, senderMeta.name, senderMeta.avatar);
+    rememberContact(targetClientId, targetMeta.name, targetMeta.avatar);
+    const message = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      from: socket.id,
+      to: targetMeta.socketId,
+      fromSocketId: socket.id,
+      fromClientId: clientId,
+      toClientId: targetClientId,
+      author: senderLive?.name || senderMeta.name || "Usuario",
+      text,
+      image,
+      createdAt: Date.now()
+    };
+    const key = persistentChatKey(clientId, targetClientId);
+    const history = persistentPrivateChats[key] || [];
+    history.push(message);
+    persistentPrivateChats[key] = history.slice(-150);
+    savePersistentPrivateChats();
+    // Entrega en tiempo real a todas las pestañas/conexiones del destinatario.
+    // Usar el canal de clientId evita depender de un socketId que pudo cambiar
+    // después de una reconexión.
+    // Evento exclusivo de aviso para el destinatario. Se mantiene separado
+    // del evento que actualiza el historial para que la notificación no dependa
+    // de si el chat está abierto, cerrado o acaba de reconectarse.
+    io.to(`client:${targetClientId}`).emit("private-message-notification", message);
+    io.to(`client:${targetClientId}`).emit("private-chat-global", message);
+    socket.emit("private-chat-global", message);
+    callback?.({ ok: true, message });
+  });
   socket.on("create-room", ({ name, avatar, clientId }, callback) => {
     removeFromRooms(socket);
     const code = roomCode();
@@ -587,7 +688,12 @@ io.on("connection", socket => {
     callback?.({ ok: true });
   });
 
-  socket.on("disconnect", () => removeFromRooms(socket));
+  socket.on("disconnect", () => {
+    const disconnectedClientId = socketClients.get(socket.id);
+    if (disconnectedClientId && connectedClients.get(disconnectedClientId)?.socketId === socket.id) connectedClients.delete(disconnectedClientId);
+    socketClients.delete(socket.id);
+    removeFromRooms(socket);
+  });
 });
 
 server.listen(PORT, "0.0.0.0", () => {

@@ -180,3 +180,7 @@ Se agregó procesamiento avanzado de voz con cancelación de eco, reducción de 
 - Los mensajes siguen disponibles al salir y volver a entrar mientras el almacenamiento del servidor se conserve.
 - Selector de emotes corregido para no salirse del panel.
 - Filtro de voz mejorado con cancelación nativa del navegador, ecualización, compresión y puerta de ruido adaptativa.
+
+
+## V34
+Se corrigió la estructura del chat privado: encabezado y controles de llamada fijos arriba, mensajes con scroll interno y compositor fijo abajo.
