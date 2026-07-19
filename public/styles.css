@@ -914,3 +914,79 @@ input[type="range"]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;b
     max-height:330px;
   }
 }
+
+
+/* V22: el panel derecho ya no tiene un scroll exterior propio.
+   Toda la columna se desplaza con la página y la cola no queda recortada. */
+@media (min-width:821px){
+  html,body{
+    min-height:100%;
+    overflow-x:hidden;
+    overflow-y:auto;
+  }
+
+  .app-layout{
+    height:auto!important;
+    min-height:100vh!important;
+    grid-template-rows:auto 104px!important;
+    align-items:start;
+  }
+
+  .main-content{
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+
+  .right-rail{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    align-content:start!important;
+    grid-template-rows:minmax(340px,520px) minmax(420px,auto) minmax(260px,420px)!important;
+    padding-bottom:145px!important;
+    scrollbar-gutter:auto!important;
+  }
+
+  .chat-widget,
+  .voice-widget,
+  .queue-widget{
+    height:auto!important;
+    max-height:none!important;
+  }
+
+  .queue-widget{
+    min-height:260px!important;
+  }
+
+  .queue-list{
+    min-height:190px!important;
+    max-height:350px;
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+}
+
+@media (min-width:821px) and (max-width:1180px){
+  .right-rail{
+    grid-template-rows:minmax(440px,560px) minmax(460px,auto) minmax(260px,420px)!important;
+  }
+}
+
+@media (max-width:820px){
+  html,body{overflow-x:hidden;overflow-y:auto}
+  .right-rail{
+    overflow:visible!important;
+    grid-template-rows:auto auto auto!important;
+  }
+  .queue-widget{
+    min-height:260px!important;
+    max-height:none!important;
+  }
+  .queue-list{
+    min-height:190px;
+    max-height:360px;
+    overflow-y:auto;
+  }
+}

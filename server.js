@@ -72,6 +72,38 @@ app.get("/api/youtube/search", async (req, res) => {
   }
 });
 
+
+// Obtiene el título y el canal de un enlace de YouTube sin gastar cuota de búsqueda.
+app.get("/api/youtube/info", async (req, res) => {
+  const videoUrl = String(req.query.url || "").trim().slice(0, 500);
+
+  if (!videoUrl) {
+    return res.status(400).json({ error: "Falta el enlace de YouTube." });
+  }
+
+  try {
+    const endpoint = new URL("https://www.youtube.com/oembed");
+    endpoint.searchParams.set("url", videoUrl);
+    endpoint.searchParams.set("format", "json");
+
+    const response = await fetch(endpoint);
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return res.status(400).json({ error: "No se pudo leer la información del enlace." });
+    }
+
+    res.json({
+      title: data.title || "Video de YouTube",
+      channel: data.author_name || "YouTube",
+      thumbnail: data.thumbnail_url || ""
+    });
+  } catch (error) {
+    console.error("Error leyendo enlace de YouTube:", error);
+    res.status(500).json({ error: "No se pudo consultar el enlace de YouTube." });
+  }
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();

@@ -1025,13 +1025,66 @@ async function searchYouTube(query) {
   }
 }
 
+async function videoFromYouTubeLink(value, optionalTitle = "") {
+  const id = parseYouTubeId(value);
+  if (!id) return null;
+
+  const fallback = {
+    id,
+    title: optionalTitle.trim() || "Video de YouTube",
+    channel: "YouTube",
+    thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+  };
+
+  try {
+    const canonicalUrl = `https://www.youtube.com/watch?v=${id}`;
+    const response = await fetch(`/api/youtube/info?url=${encodeURIComponent(canonicalUrl)}`);
+    const data = await response.json();
+
+    if (!response.ok) return fallback;
+
+    return {
+      id,
+      title: optionalTitle.trim() || data.title || fallback.title,
+      channel: data.channel || fallback.channel,
+      thumbnail: data.thumbnail || fallback.thumbnail
+    };
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+async function addYouTubeLinkDirectlyToQueue(value, optionalTitle = "") {
+  const video = await videoFromYouTubeLink(value, optionalTitle);
+
+  if (!video) {
+    notify("El enlace de YouTube no es válido.");
+    return false;
+  }
+
+  addVideoToQueue(video);
+  return true;
+}
+
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   const query = $("searchInput").value.trim();
   $("searchMirror").value = query;
 
   if (!query) {
-    return notify("Escribe el nombre de una canción.");
+    return notify("Escribe el nombre de una canción o pega un enlace de YouTube.");
+  }
+
+  // Si se pega un enlace en el buscador, se agrega directamente a la cola.
+  if (parseYouTubeId(query)) {
+    const added = await addYouTubeLinkDirectlyToQueue(query);
+    if (added) {
+      $("searchStatus").textContent = "Enlace agregado directamente a la cola.";
+      $("searchResults").innerHTML = "";
+      $("searchInput").value = "";
+      $("searchMirror").value = "";
+    }
+    return;
   }
 
   await searchYouTube(query);
@@ -1049,10 +1102,15 @@ function selectedVideo() {
 
 $("videoForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const video = selectedVideo();
+  const url = $("youtubeUrl").value.trim();
+  const title = $("videoTitle").value.trim();
+  const added = await addYouTubeLinkDirectlyToQueue(url, title);
 
-  if (!video) return notify("El enlace de YouTube no es válido.");
-  await startSelectedVideo(video);
+  if (added) {
+    $("youtubeUrl").value = "";
+    $("videoTitle").value = "";
+    $("searchStatus").textContent = "Enlace agregado directamente a la cola.";
+  }
 });
 
 $("playBtn").addEventListener("click", async () => {
