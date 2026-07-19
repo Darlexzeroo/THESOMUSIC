@@ -162,3 +162,10 @@ En pantallas de hasta 820 px, el bloque para crear una sala o introducir un cód
 - Cada participante remoto tiene un control de volumen individual de 0% a 200%.
 - El volumen general del chat de voz sigue funcionando de manera independiente.
 - Los niveles individuales quedan guardados en el navegador.
+
+## V17
+Se corrigió el desbordamiento del chat de voz y del chat de texto en el panel derecho.
+
+## V21 - Filtro anti ruido mejorado
+
+Se agregó procesamiento avanzado de voz con cancelación de eco, reducción de ruido del navegador, filtro pasa-altos, filtro pasa-bajos, realce de presencia y compresión de picos.

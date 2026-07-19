@@ -33,11 +33,11 @@
 
   <div class="app-layout">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-wave">◢◣</span><strong>WaveRoom</strong><button class="collapse" type="button">«</button></div>
+      <div class="brand"><span class="brand-wave">◢◣</span><strong>THESO</strong><button class="collapse" type="button">«</button></div>
 
       <button class="profile-card" id="openProfile" type="button">
         <span id="avatar" class="avatar">D</span>
-        <span><strong id="profileName">David</strong><small>En línea <i></i></small></span>
+        <span><strong id="profileName">USER</strong><small>En línea <i></i></small></span>
         <b><svg class="ui-icon"><use href="#i-edit"/></svg></b>
       </button>
 
@@ -86,7 +86,7 @@
 
       <section class="home-panel" id="homePanel">
         <div class="hero-card">
-          <div class="hero-copy"><span>BIENVENIDO A</span><h1>Wave<span>Room</span></h1><p>Música en sincronía con tus amigos</p></div>
+          <div class="hero-copy"><span>BIENVENIDO A</span><h1>THE<span>SO</span></h1><p>Música en sincronía con tus amigos</p></div>
           <div class="wave-art"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           <div class="feature-grid">
             <article><b>⟳</b><div><strong>Sincronizado</strong><p>Todos escuchan al mismo tiempo</p></div></article>
@@ -109,9 +109,10 @@
     </main>
 
     <aside class="right-rail" id="rooms">
-      <section class="queue-widget">
-        <header><h2>Cola de reproducción</h2><span id="queueCount">0</span></header>
-        <div id="queue" class="queue-list"><div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div></div>
+      <section class="chat-widget">
+        <header><h2>Chat de la sala</h2><span><svg class="ui-icon"><use href="#i-users"/></svg><b id="chatCount">0</b></span></header>
+        <div id="messages" class="messages"><p class="empty-state">Entra a una sala para conversar.</p></div>
+        <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="400" placeholder="Escribe un mensaje..."><button type="submit">➤</button></form>
       </section>
 
       <section class="voice-widget">
@@ -121,6 +122,11 @@
           <button id="voiceMuteBtn" type="button" class="hidden">🔇 Silenciar</button>
           <button id="voiceLeaveBtn" type="button" class="hidden">Salir</button>
         </div>
+        <label class="voice-noise-control" for="voiceNoiseFilter">
+          <span><strong>Filtro anti ruido</strong><small>Reduce eco y ruido de fondo</small></span>
+          <input id="voiceNoiseFilter" type="checkbox" checked>
+          <i aria-hidden="true"></i>
+        </label>
         <label class="voice-volume-control" for="voiceVolumeBar">
           <span>🔊 Volumen de voces</span>
           <strong id="voiceVolumeValue">100%</strong>
@@ -130,10 +136,9 @@
         <div id="remoteAudios" hidden></div>
       </section>
 
-      <section class="chat-widget">
-        <header><h2>Chat de la sala</h2><span><svg class="ui-icon"><use href="#i-users"/></svg><b id="chatCount">0</b></span></header>
-        <div id="messages" class="messages"><p class="empty-state">Entra a una sala para conversar.</p></div>
-        <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="400" placeholder="Escribe un mensaje..."><button type="submit">➤</button></form>
+      <section class="queue-widget">
+        <header><h2>Cola de reproducción</h2><span id="queueCount">0</span></header>
+        <div id="queue" class="queue-list"><div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div></div>
       </section>
     </aside>
 
@@ -154,7 +159,7 @@
       <span class="eyebrow">PERSONALIZACIÓN</span><h2>Editar perfil</h2><p>Elige el nombre y la foto que verán los demás.</p>
       <form id="profileForm" class="profile-form">
         <div class="profile-photo-zone"><div id="profilePreview" class="avatar avatar-large">D</div><div><strong>Foto de perfil</strong><small>JPG, PNG o WEBP · máximo 2 MB</small><div class="photo-actions"><label for="profilePhoto">Elegir imagen</label><input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" hidden><button id="removePhoto" type="button">Quitar</button></div></div></div>
-        <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="David" placeholder="Tu nombre">
+        <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="USER" placeholder="Tu nombre">
         <div class="modal-actions"><button id="cancelProfile" type="button">Cancelar</button><button class="save-profile" type="submit">Guardar cambios</button></div>
       </form>
     </section>

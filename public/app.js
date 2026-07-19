@@ -16,6 +16,8 @@ const toast = $("toast");
 let profilePhotoData = localStorage.getItem("waveroom-photo") || "";
 
 let voiceStream = null;
+let voiceRawStream = null;
+let voiceFilterGraph = null;
 let voiceJoined = false;
 let voiceMuted = false;
 const voicePeers = new Map();
@@ -25,6 +27,7 @@ const voiceAnalysers = new Map();
 const speakingUsers = new Set();
 let voiceMeterFrame = null;
 let voiceOutputVolume = Math.max(0, Math.min(100, Number(localStorage.getItem("waveroom-voice-volume") ?? 100)));
+let voiceNoiseFilterEnabled = localStorage.getItem("waveroom-voice-noise-filter") !== "false";
 const rtcConfig = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -446,7 +449,7 @@ function getVoiceUserName(id) {
 function getStoredVoiceUserVolume(id) {
   if (!voiceUserVolumes.has(id)) {
     const saved = Number(localStorage.getItem(`waveroom-voice-user-${id}`) ?? 100);
-    voiceUserVolumes.set(id, Math.max(0, Math.min(200, saved)));
+    voiceUserVolumes.set(id, Math.max(0, Math.min(100, saved)));
   }
   return voiceUserVolumes.get(id);
 }
@@ -459,7 +462,7 @@ function applyVoiceVolume(id) {
 }
 
 function setVoiceUserVolume(id, value) {
-  const safeValue = Math.max(0, Math.min(200, Number(value) || 0));
+  const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
   voiceUserVolumes.set(id, safeValue);
   localStorage.setItem(`waveroom-voice-user-${id}`, String(safeValue));
   applyVoiceVolume(id);
@@ -496,7 +499,7 @@ function updateVoiceUsers(ids = []) {
     const controls = id === mySocketId ? "" : `
       <label class="voice-user-volume" title="Volumen de ${escapeHtml(rawName)}">
         <span>Volumen</span>
-        <input type="range" min="0" max="200" value="${volume}" data-voice-user="${escapeHtml(id)}" aria-label="Volumen de ${escapeHtml(rawName)}">
+        <input type="range" min="0" max="100" value="${volume}" data-voice-user="${escapeHtml(id)}" aria-label="Volumen de ${escapeHtml(rawName)}">
         <strong data-voice-volume-value="${escapeHtml(id)}">${volume}%</strong>
       </label>`;
     return `<div class="voice-member${muted ? " muted" : ""}${speaking ? " speaking" : ""}" data-voice-member="${escapeHtml(id)}">
@@ -655,15 +658,28 @@ async function joinVoiceChat() {
   $("voiceStatus").textContent = "Solicitando permiso del micrófono...";
 
   try {
-    voiceStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    voiceRawStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: voiceNoiseFilterEnabled,
+        noiseSuppression: voiceNoiseFilterEnabled,
+        autoGainControl: voiceNoiseFilterEnabled,
+        channelCount: 1,
+        sampleRate: { ideal: 48000 },
+        sampleSize: { ideal: 16 },
+        latency: { ideal: 0.02 }
+      },
       video: false
     });
 
+    voiceStream = await createEnhancedVoiceStream(voiceRawStream, voiceNoiseFilterEnabled);
+
     socket.emit("voice-join", { code: currentRoom.code }, async response => {
       if (!response?.ok) {
-        voiceStream.getTracks().forEach(track => track.stop());
+        voiceStream?.getTracks().forEach(track => track.stop());
+        voiceRawStream?.getTracks().forEach(track => track.stop());
+        closeVoiceFilterGraph();
         voiceStream = null;
+        voiceRawStream = null;
         $("voiceJoinBtn").disabled = false;
         return notify(response?.error || "No se pudo entrar al chat de voz.");
       }
@@ -686,6 +702,128 @@ async function joinVoiceChat() {
   }
 }
 
+async function createEnhancedVoiceStream(rawStream, enabled) {
+  await closeVoiceFilterGraph();
+  if (!enabled || !rawStream) return rawStream;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return rawStream;
+
+  try {
+    const context = new AudioContextClass({ latencyHint: "interactive", sampleRate: 48000 });
+    const source = context.createMediaStreamSource(rawStream);
+
+    // Elimina vibraciones, ventiladores y golpes graves.
+    const highPass = context.createBiquadFilter();
+    highPass.type = "highpass";
+    highPass.frequency.value = 110;
+    highPass.Q.value = 0.8;
+
+    // Reduce siseo y ruido agudo sin apagar demasiado la voz.
+    const lowPass = context.createBiquadFilter();
+    lowPass.type = "lowpass";
+    lowPass.frequency.value = 7600;
+    lowPass.Q.value = 0.7;
+
+    // Da prioridad a las frecuencias donde la voz se entiende mejor.
+    const presence = context.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 2800;
+    presence.Q.value = 1.0;
+    presence.gain.value = 2.2;
+
+    // Evita picos fuertes y mantiene el volumen de voz estable.
+    const compressor = context.createDynamicsCompressor();
+    compressor.threshold.value = -35;
+    compressor.knee.value = 24;
+    compressor.ratio.value = 5;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.22;
+
+    const outputGain = context.createGain();
+    outputGain.gain.value = 0.92;
+    const destination = context.createMediaStreamDestination();
+
+    source.connect(highPass);
+    highPass.connect(lowPass);
+    lowPass.connect(presence);
+    presence.connect(compressor);
+    compressor.connect(outputGain);
+    outputGain.connect(destination);
+
+    if (context.state === "suspended") await context.resume();
+    voiceFilterGraph = { context, source, highPass, lowPass, presence, compressor, outputGain, destination };
+    return destination.stream;
+  } catch (error) {
+    console.warn("Procesamiento avanzado de voz no disponible:", error);
+    await closeVoiceFilterGraph();
+    return rawStream;
+  }
+}
+
+async function closeVoiceFilterGraph() {
+  if (!voiceFilterGraph) return;
+  try { voiceFilterGraph.source?.disconnect(); } catch {}
+  try { voiceFilterGraph.highPass?.disconnect(); } catch {}
+  try { voiceFilterGraph.lowPass?.disconnect(); } catch {}
+  try { voiceFilterGraph.presence?.disconnect(); } catch {}
+  try { voiceFilterGraph.compressor?.disconnect(); } catch {}
+  try { voiceFilterGraph.outputGain?.disconnect(); } catch {}
+  try { await voiceFilterGraph.context?.close(); } catch {}
+  voiceFilterGraph = null;
+}
+
+async function replaceVoiceTrackForPeers(newTrack) {
+  for (const peer of voicePeers.values()) {
+    const sender = peer.getSenders().find(item => item.track?.kind === "audio");
+    if (sender) {
+      try { await sender.replaceTrack(newTrack); } catch (error) { console.warn("No se pudo reemplazar la pista:", error); }
+    }
+  }
+}
+
+async function applyVoiceNoiseFilter(enabled, showNotice = true) {
+  voiceNoiseFilterEnabled = Boolean(enabled);
+  localStorage.setItem("waveroom-voice-noise-filter", String(voiceNoiseFilterEnabled));
+
+  const rawTrack = voiceRawStream?.getAudioTracks?.()[0];
+  if (!rawTrack) return;
+
+  try {
+    if (rawTrack.applyConstraints) {
+      await rawTrack.applyConstraints({
+        echoCancellation: voiceNoiseFilterEnabled,
+        noiseSuppression: voiceNoiseFilterEnabled,
+        autoGainControl: voiceNoiseFilterEnabled,
+        channelCount: 1
+      });
+    }
+
+    const oldStream = voiceStream;
+    voiceStream = await createEnhancedVoiceStream(voiceRawStream, voiceNoiseFilterEnabled);
+    const newTrack = voiceStream.getAudioTracks()[0];
+    if (newTrack) {
+      newTrack.enabled = !voiceMuted;
+      await replaceVoiceTrackForPeers(newTrack);
+      removeVoiceAnalyser(mySocketId);
+      attachVoiceAnalyser(mySocketId, voiceStream);
+    }
+
+    if (oldStream && oldStream !== voiceRawStream && oldStream !== voiceStream) {
+      oldStream.getTracks().forEach(track => track.stop());
+    }
+
+    if (showNotice) {
+      notify(voiceNoiseFilterEnabled
+        ? "Filtro avanzado activado: eco, ruido, graves y picos reducidos."
+        : "Filtro anti ruido desactivado.");
+    }
+  } catch (error) {
+    console.warn("No se pudo cambiar el filtro anti ruido:", error);
+    if (showNotice) notify("El navegador no pudo cambiar el filtro del micrófono.");
+  }
+}
+
 function toggleVoiceMute() {
   if (!voiceStream) return;
   voiceMuted = !voiceMuted;
@@ -703,7 +841,10 @@ function leaveVoiceChat(notifyServer = true) {
     socket.emit("voice-leave", { code: currentRoom.code });
   }
   voiceStream?.getTracks().forEach(track => track.stop());
+  voiceRawStream?.getTracks().forEach(track => track.stop());
+  closeVoiceFilterGraph();
   voiceStream = null;
+  voiceRawStream = null;
   [...voicePeers.keys()].forEach(closeVoicePeer);
   voiceMutedUsers.clear();
   [...voiceAnalysers.keys()].forEach(removeVoiceAnalyser);
@@ -1214,6 +1355,12 @@ socket.on("voice-signal", async ({ from, data }) => {
 socket.on("chat", addMessage);
 socket.on("system-message", text => addMessage({ text }));
 socket.on("became-host", () => notify("Ahora eres el anfitrión."));
+
+
+$("voiceNoiseFilter").checked = voiceNoiseFilterEnabled;
+$("voiceNoiseFilter").addEventListener("change", event => {
+  applyVoiceNoiseFilter(event.currentTarget.checked, true);
+});
 
 $("voiceJoinBtn").addEventListener("click", joinVoiceChat);
 $("voiceMuteBtn").addEventListener("click", toggleVoiceMute);
