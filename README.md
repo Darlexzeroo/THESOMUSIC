@@ -169,3 +169,14 @@ Se corrigió el desbordamiento del chat de voz y del chat de texto en el panel d
 ## V21 - Filtro anti ruido mejorado
 
 Se agregó procesamiento avanzado de voz con cancelación de eco, reducción de ruido del navegador, filtro pasa-altos, filtro pasa-bajos, realce de presencia y compresión de picos.
+
+## Versión V28
+- El chat de la sala mantiene una altura fija y los mensajes se desplazan dentro del panel.
+- El área para escribir permanece visible aunque se envíen muchas imágenes o mensajes.
+
+
+## V29
+- Los chats privados conservan hasta 150 mensajes por conversación usando una identidad estable guardada en el navegador.
+- Los mensajes siguen disponibles al salir y volver a entrar mientras el almacenamiento del servidor se conserve.
+- Selector de emotes corregido para no salirse del panel.
+- Filtro de voz mejorado con cancelación nativa del navegador, ecualización, compresión y puerta de ruido adaptativa.

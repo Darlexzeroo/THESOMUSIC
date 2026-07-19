@@ -14,6 +14,8 @@ const $ = id => document.getElementById(id);
 const username = $("username");
 const toast = $("toast");
 let profilePhotoData = localStorage.getItem("waveroom-photo") || "";
+const persistentClientId = localStorage.getItem("waveroom-client-id") || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+localStorage.setItem("waveroom-client-id", persistentClientId);
 
 let voiceStream = null;
 let voiceRawStream = null;
@@ -28,6 +30,12 @@ const speakingUsers = new Set();
 let voiceMeterFrame = null;
 let voiceOutputVolume = Math.max(0, Math.min(100, Number(localStorage.getItem("waveroom-voice-volume") ?? 100)));
 let voiceNoiseFilterEnabled = localStorage.getItem("waveroom-voice-noise-filter") !== "false";
+let activePrivateUserId = null;
+const privateUnread = new Map();
+let privateCallPeer = null;
+let privateCallTargetId = null;
+let incomingPrivateCallerId = null;
+let privateCallActive = false;
 const rtcConfig = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -40,6 +48,74 @@ function notify(text) {
   toast.classList.remove("hidden");
   clearTimeout(notify.timer);
   notify.timer = setTimeout(() => toast.classList.add("hidden"), 2500);
+}
+
+const appNotifications = [];
+let unreadAppNotifications = 0;
+
+function ensureNotificationCenter() {
+  let center = document.getElementById("notificationCenter");
+  if (center) return center;
+  center = document.createElement("section");
+  center.id = "notificationCenter";
+  center.className = "notification-center hidden";
+  center.innerHTML = `<header><strong>Notificaciones</strong><button id="clearNotifications" type="button">Marcar leídas</button></header><div id="notificationList" class="notification-list"></div>`;
+  document.body.appendChild(center);
+  center.addEventListener("click", event => event.stopPropagation());
+  center.querySelector("#clearNotifications").addEventListener("click", () => {
+    unreadAppNotifications = 0;
+    updateNotificationBell();
+    renderNotifications();
+  });
+  return center;
+}
+
+function updateNotificationBell() {
+  const dot = document.querySelector(".notification-dot");
+  if (!dot) return;
+  dot.textContent = unreadAppNotifications ? String(Math.min(99, unreadAppNotifications)) : "";
+  dot.classList.toggle("has-count", unreadAppNotifications > 0);
+  dot.classList.toggle("hidden", unreadAppNotifications === 0);
+}
+
+function renderNotifications() {
+  const list = ensureNotificationCenter().querySelector("#notificationList");
+  list.innerHTML = appNotifications.length ? appNotifications.map((item, index) => `
+    <button class="notification-item" type="button" data-notification-index="${index}">
+      <b>${item.icon || "🔔"}</b><span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></span>
+    </button>`).join("") : '<p class="notification-empty">Todavía no hay notificaciones.</p>';
+  list.querySelectorAll("[data-notification-index]").forEach(button => button.addEventListener("click", () => {
+    const item = appNotifications[Number(button.dataset.notificationIndex)];
+    ensureNotificationCenter().classList.add("hidden");
+    if (item?.openFriends) openFriendsModal();
+    if (item?.userId) setTimeout(() => openPrivateChat(item.userId), 80);
+  }));
+}
+
+function addFriendsNotification(title, text, options = {}) {
+  appNotifications.unshift({ title, text, icon: options.icon || "👥", openFriends: true, userId: options.userId || null });
+  if (appNotifications.length > 30) appNotifications.length = 30;
+  unreadAppNotifications += 1;
+  updateNotificationBell();
+  renderNotifications();
+}
+
+function setupNotificationBell() {
+  const button = document.querySelector(".notification-btn");
+  if (!button) return;
+  ensureNotificationCenter();
+  updateNotificationBell();
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    const center = ensureNotificationCenter();
+    center.classList.toggle("hidden");
+    if (!center.classList.contains("hidden")) {
+      unreadAppNotifications = 0;
+      updateNotificationBell();
+      renderNotifications();
+    }
+  });
+  document.addEventListener("click", () => ensureNotificationCenter().classList.add("hidden"));
 }
 
 function escapeHtml(text) {
@@ -55,7 +131,7 @@ function getName() {
 }
 
 function getProfile() {
-  return { name: getName(), avatar: profilePhotoData };
+  return { name: getName(), avatar: profilePhotoData, clientId: persistentClientId };
 }
 
 function applyAvatar(element, name = getName(), avatar = profilePhotoData) {
@@ -99,6 +175,209 @@ function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60);
   const rest = Math.floor(seconds % 60).toString().padStart(2, "0");
   return `${minutes}:${rest}`;
+}
+
+
+
+const EMOTES = ["😀","😂","😍","😎","😭","😡","🥳","🤔","👍","👎","❤️","🔥","🎉","💀","👀","🙏","🎵","🎧","🎤","✨","🚀","🫡","😴","🤡"];
+
+function setupEmojiPicker(buttonId, pickerId, inputId) {
+  const button = $(buttonId);
+  const picker = $(pickerId);
+  const input = $(inputId);
+  picker.innerHTML = EMOTES.map(e => `<button type="button" data-emote="${e}">${e}</button>`).join("");
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    picker.classList.toggle("hidden");
+  });
+  picker.addEventListener("click", event => {
+    const emote = event.target.closest("[data-emote]")?.dataset.emote;
+    if (!emote) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + emote + input.value.slice(end);
+    picker.classList.add("hidden");
+    input.focus();
+    input.setSelectionRange(start + emote.length, start + emote.length);
+  });
+  document.addEventListener("click", event => {
+    if (!picker.contains(event.target) && event.target !== button) picker.classList.add("hidden");
+  });
+}
+
+async function ensureVoiceStream() {
+  if (voiceStream) return voiceStream;
+  voiceRawStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: voiceNoiseFilterEnabled, noiseSuppression: voiceNoiseFilterEnabled, autoGainControl: voiceNoiseFilterEnabled, channelCount: 1, sampleRate: { ideal: 48000 }, sampleSize: { ideal: 24 }, latency: { ideal: 0.02 } },
+    video: false
+  });
+  voiceStream = await createEnhancedVoiceStream(voiceRawStream, voiceNoiseFilterEnabled);
+  return voiceStream;
+}
+
+function setPrivateCallUi(active, text = "Chat privado") {
+  privateCallActive = active;
+  $("privateCallBtn").classList.toggle("hidden", active);
+  $("privateHangupBtn").classList.toggle("hidden", !active);
+  $("privateCallStatus").textContent = text;
+}
+
+function closePrivateCallPeer() {
+  try { privateCallPeer?.close(); } catch {}
+  privateCallPeer = null;
+  document.getElementById("private-call-audio")?.remove();
+}
+
+function createPrivateCallPeer(targetId) {
+  closePrivateCallPeer();
+  const peer = new RTCPeerConnection(rtcConfig);
+  privateCallPeer = peer;
+  voiceStream?.getTracks().forEach(track => peer.addTrack(track, voiceStream));
+  peer.onicecandidate = event => {
+    if (event.candidate && currentRoom && privateCallTargetId) socket.emit("private-call-signal", { code: currentRoom.code, target: privateCallTargetId, data: { type: "candidate", candidate: event.candidate } });
+  };
+  peer.ontrack = event => {
+    let audio = document.getElementById("private-call-audio");
+    if (!audio) { audio = document.createElement("audio"); audio.id = "private-call-audio"; audio.autoplay = true; audio.playsInline = true; $("remoteAudios").appendChild(audio); }
+    audio.srcObject = event.streams[0];
+    audio.volume = voiceOutputVolume / 100;
+    audio.play().catch(() => notify("Toca la pantalla para activar el audio."));
+  };
+  peer.onconnectionstatechange = () => {
+    if (["failed","closed","disconnected"].includes(peer.connectionState)) endPrivateCall(false);
+  };
+  return peer;
+}
+
+async function startPrivateCall() {
+  if (!currentRoom || !activePrivateUserId) return notify("Selecciona una persona.");
+  if (voiceJoined) { leaveVoiceChat(true); notify("Saliste de la llamada grupal para iniciar la privada."); }
+  try {
+    await ensureVoiceStream();
+    privateCallTargetId = activePrivateUserId;
+    setPrivateCallUi(true, "Llamando...");
+    socket.emit("private-call-invite", { code: currentRoom.code, target: privateCallTargetId }, response => {
+      if (!response?.ok) { endPrivateCall(false); notify(response?.error || "No se pudo llamar."); }
+    });
+  } catch { notify("Debes permitir el micrófono."); setPrivateCallUi(false); }
+}
+
+async function acceptPrivateCallInvite() {
+  if (!incomingPrivateCallerId || !currentRoom) return;
+  if (voiceJoined) leaveVoiceChat(true);
+  try {
+    await ensureVoiceStream();
+    privateCallTargetId = incomingPrivateCallerId;
+    incomingPrivateCallerId = null;
+    $("incomingPrivateCall").classList.add("hidden");
+    setPrivateCallUi(true, "Conectando llamada privada...");
+    createPrivateCallPeer(privateCallTargetId);
+    socket.emit("private-call-response", { code: currentRoom.code, target: privateCallTargetId, accepted: true });
+  } catch { notify("No se pudo activar el micrófono."); }
+}
+
+function rejectPrivateCallInvite() {
+  if (incomingPrivateCallerId && currentRoom) socket.emit("private-call-response", { code: currentRoom.code, target: incomingPrivateCallerId, accepted: false });
+  incomingPrivateCallerId = null;
+  $("incomingPrivateCall").classList.add("hidden");
+}
+
+function endPrivateCall(notifyServer = true) {
+  if (notifyServer && currentRoom && privateCallTargetId) socket.emit("private-call-end", { code: currentRoom.code, target: privateCallTargetId });
+  closePrivateCallPeer();
+  privateCallTargetId = null;
+  setPrivateCallUi(false, "Chat privado");
+  if (!voiceJoined) { voiceStream?.getTracks().forEach(t => t.stop()); voiceRawStream?.getTracks().forEach(t => t.stop()); closeVoiceFilterGraph(); voiceStream = null; voiceRawStream = null; }
+}
+
+function openFriendsModal() {
+  $("friendsModal").classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  renderFriendsList();
+}
+
+function closeFriendsModal() {
+  $("friendsModal").classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+
+function updatePrivateUnreadBadge() {
+  const total = [...privateUnread.values()].reduce((sum, value) => sum + value, 0);
+  const badge = $("privateUnreadBadge");
+  badge.textContent = total > 99 ? "99+" : String(total);
+  badge.classList.toggle("hidden", total === 0);
+}
+
+function getRoomUser(id) {
+  return currentRoom?.users?.find(user => user.id === id) || null;
+}
+
+function renderFriendsList() {
+  const users = currentRoom?.users || [];
+  $("friendsCount").textContent = users.length;
+
+  if (!currentRoom) {
+    $("friendsList").innerHTML = '<p class="friends-empty">Entra a una sala para ver a tus amigos.</p>';
+    return;
+  }
+
+  $("friendsList").innerHTML = users.map(user => {
+    const isMe = user.id === mySocketId;
+    const unread = privateUnread.get(user.id) || 0;
+    return `<button class="friend-row${activePrivateUserId === user.id ? " active" : ""}" type="button" data-friend-id="${escapeHtml(user.id)}" ${isMe ? "disabled" : ""}>
+      <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name[0]?.toUpperCase() || "?")}</span>
+      <span><strong>${escapeHtml(user.name)}${isMe ? " · Tú" : ""}</strong><small>${user.id === currentRoom.hostId ? "Anfitrión" : "En la sala"}</small></span>
+      ${unread ? `<b class="friend-unread">${unread > 99 ? "99+" : unread}</b>` : ""}
+    </button>`;
+  }).join("");
+
+  $("friendsList").querySelectorAll("[data-friend-id]:not([disabled])").forEach(button => {
+    button.addEventListener("click", () => openPrivateChat(button.dataset.friendId));
+  });
+}
+
+function renderPrivateMessages(messages = []) {
+  const box = $("privateMessages");
+  box.innerHTML = messages.length ? messages.map(message => {
+    const mine = message.from === mySocketId;
+    const time = new Date(message.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `<div class="private-message ${mine ? "mine" : "theirs"}">${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}<small>${time}</small></div>`;
+  }).join("") : '<p class="private-chat-hint">Todavía no hay mensajes. Envía el primero.</p>';
+  bindChatImages(box);
+  box.scrollTop = box.scrollHeight;
+}
+
+function openPrivateChat(userId) {
+  const user = getRoomUser(userId);
+  if (!user || userId === mySocketId) return;
+
+  activePrivateUserId = userId;
+  privateUnread.delete(userId);
+  updatePrivateUnreadBadge();
+  renderFriendsList();
+  $("privateChatEmpty").classList.add("hidden");
+  $("privateChatActive").classList.remove("hidden");
+  $("privateChatName").textContent = user.name;
+  const avatar = $("privateChatAvatar");
+  avatar.textContent = user.avatar ? "" : (user.name[0]?.toUpperCase() || "?");
+  avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
+  renderPrivateMessages([]);
+
+  socket.emit("private-chat-history", { code: currentRoom.code, target: userId }, response => {
+    if (!response?.ok || activePrivateUserId !== userId) return;
+    renderPrivateMessages(response.messages || []);
+    $("privateChatInput").focus();
+  });
+}
+
+function resetPrivateChat() {
+  activePrivateUserId = null;
+  privateUnread.clear();
+  updatePrivateUnreadBadge();
+  $("privateChatEmpty").classList.remove("hidden");
+  $("privateChatActive").classList.add("hidden");
+  $("privateMessages").innerHTML = "";
+  renderFriendsList();
 }
 
 function openProfileModal() {
@@ -357,6 +636,8 @@ function renderRoom(room) {
 
   $("queueCount").textContent = room.queue.length;
   $("chatCount").textContent = room.users.length;
+  renderFriendsList();
+  if (activePrivateUserId && !room.users.some(user => user.id === activePrivateUserId)) resetPrivateChat();
   $("queue").innerHTML = room.queue.length ? room.queue.map(video => `
     <div class="queue-item">
       <img src="${video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}" alt="">
@@ -403,6 +684,8 @@ function resetRoomUI() {
   $("chatCount").textContent = "0";
   $("queue").innerHTML = `<div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div>`;
   $("messages").innerHTML = `<p class="muted">Entra a una sala para conversar.</p>`;
+  resetPrivateChat();
+  closeFriendsModal();
   delete $("messages").dataset.loaded;
   clearInterval(syncInterval);
 }
@@ -705,54 +988,43 @@ async function joinVoiceChat() {
 async function createEnhancedVoiceStream(rawStream, enabled) {
   await closeVoiceFilterGraph();
   if (!enabled || !rawStream) return rawStream;
-
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return rawStream;
-
   try {
     const context = new AudioContextClass({ latencyHint: "interactive", sampleRate: 48000 });
     const source = context.createMediaStreamSource(rawStream);
-
-    // Elimina vibraciones, ventiladores y golpes graves.
     const highPass = context.createBiquadFilter();
-    highPass.type = "highpass";
-    highPass.frequency.value = 110;
-    highPass.Q.value = 0.8;
-
-    // Reduce siseo y ruido agudo sin apagar demasiado la voz.
+    highPass.type = "highpass"; highPass.frequency.value = 105; highPass.Q.value = 0.75;
     const lowPass = context.createBiquadFilter();
-    lowPass.type = "lowpass";
-    lowPass.frequency.value = 7600;
-    lowPass.Q.value = 0.7;
-
-    // Da prioridad a las frecuencias donde la voz se entiende mejor.
+    lowPass.type = "lowpass"; lowPass.frequency.value = 7800; lowPass.Q.value = 0.65;
     const presence = context.createBiquadFilter();
-    presence.type = "peaking";
-    presence.frequency.value = 2800;
-    presence.Q.value = 1.0;
-    presence.gain.value = 2.2;
-
-    // Evita picos fuertes y mantiene el volumen de voz estable.
+    presence.type = "peaking"; presence.frequency.value = 3000; presence.Q.value = 0.9; presence.gain.value = 2.5;
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.82;
+    const gateGain = context.createGain(); gateGain.gain.value = 1;
     const compressor = context.createDynamicsCompressor();
-    compressor.threshold.value = -35;
-    compressor.knee.value = 24;
-    compressor.ratio.value = 5;
-    compressor.attack.value = 0.004;
-    compressor.release.value = 0.22;
-
-    const outputGain = context.createGain();
-    outputGain.gain.value = 0.92;
+    compressor.threshold.value = -38; compressor.knee.value = 18; compressor.ratio.value = 6; compressor.attack.value = 0.003; compressor.release.value = 0.18;
+    const outputGain = context.createGain(); outputGain.gain.value = 0.94;
     const destination = context.createMediaStreamDestination();
-
-    source.connect(highPass);
-    highPass.connect(lowPass);
-    lowPass.connect(presence);
-    presence.connect(compressor);
-    compressor.connect(outputGain);
-    outputGain.connect(destination);
-
+    source.connect(highPass); highPass.connect(lowPass); lowPass.connect(presence);
+    presence.connect(analyser); analyser.connect(gateGain); gateGain.connect(compressor); compressor.connect(outputGain); outputGain.connect(destination);
+    const samples = new Uint8Array(analyser.fftSize);
+    let noiseFloor = 0.008;
+    let gateFrame = 0;
+    const updateGate = () => {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const value of samples) { const x = (value - 128) / 128; sum += x * x; }
+      const rms = Math.sqrt(sum / samples.length);
+      if (rms < noiseFloor * 1.8) noiseFloor = noiseFloor * 0.985 + rms * 0.015;
+      const threshold = Math.max(0.012, noiseFloor * 2.25);
+      const target = rms > threshold ? 1 : Math.max(0.045, rms / threshold * 0.18);
+      gateGain.gain.setTargetAtTime(target, context.currentTime, target > gateGain.gain.value ? 0.012 : 0.075);
+      gateFrame = requestAnimationFrame(updateGate);
+    };
+    updateGate();
     if (context.state === "suspended") await context.resume();
-    voiceFilterGraph = { context, source, highPass, lowPass, presence, compressor, outputGain, destination };
+    voiceFilterGraph = { context, source, highPass, lowPass, presence, analyser, gateGain, compressor, outputGain, destination, gateFrame };
     return destination.stream;
   } catch (error) {
     console.warn("Procesamiento avanzado de voz no disponible:", error);
@@ -763,10 +1035,13 @@ async function createEnhancedVoiceStream(rawStream, enabled) {
 
 async function closeVoiceFilterGraph() {
   if (!voiceFilterGraph) return;
+  try { cancelAnimationFrame(voiceFilterGraph.gateFrame); } catch {}
   try { voiceFilterGraph.source?.disconnect(); } catch {}
   try { voiceFilterGraph.highPass?.disconnect(); } catch {}
   try { voiceFilterGraph.lowPass?.disconnect(); } catch {}
   try { voiceFilterGraph.presence?.disconnect(); } catch {}
+  try { voiceFilterGraph.analyser?.disconnect(); } catch {}
+  try { voiceFilterGraph.gateGain?.disconnect(); } catch {}
   try { voiceFilterGraph.compressor?.disconnect(); } catch {}
   try { voiceFilterGraph.outputGain?.disconnect(); } catch {}
   try { await voiceFilterGraph.context?.close(); } catch {}
@@ -857,13 +1132,85 @@ function leaveVoiceChat(notifyServer = true) {
   }
 }
 
+async function prepareChatImage(file) {
+  const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+  if (!file || !allowed.includes(file.type)) throw new Error("Usa una imagen PNG, JPG, WEBP o GIF.");
+  if (file.size > 10 * 1024 * 1024) throw new Error("La imagen no puede superar 10 MB.");
+
+  if (file.type === "image/gif") {
+    if (file.size > 3.5 * 1024 * 1024) throw new Error("El GIF debe pesar menos de 3.5 MB.");
+    return { data: await readFileDataUrl(file), name: file.name };
+  }
+
+  const source = await readFileDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    img.src = source;
+  });
+  const maxSide = 1280;
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+  return { data: canvas.toDataURL("image/webp", .82), name: file.name.replace(/\.[^.]+$/, ".webp") };
+}
+
+function readFileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageMessageHtml(image) {
+  if (!image?.data) return "";
+  return `<button class="chat-image-open" type="button" data-chat-image="${escapeHtml(image.data)}"><img class="chat-image" src="${escapeHtml(image.data)}" alt="${escapeHtml(image.name || "Imagen")}" loading="lazy"></button>`;
+}
+
+function bindChatImages(container) {
+  container.querySelectorAll("[data-chat-image]").forEach(button => {
+    button.addEventListener("click", () => {
+      $("imageViewerImg").src = button.dataset.chatImage;
+      $("imageViewer").classList.remove("hidden");
+    });
+  });
+}
+
+async function sendRoomImage(file) {
+  if (!currentRoom) return notify("Primero entra a una sala.");
+  try {
+    notify("Preparando imagen...");
+    const image = await prepareChatImage(file);
+    socket.emit("chat", { code: currentRoom.code, text: "", image }, response => {
+      if (!response?.ok) notify(response?.error || "No se pudo enviar la imagen.");
+    });
+  } catch (error) { notify(error.message); }
+}
+
+async function sendPrivateImage(file) {
+  if (!currentRoom || !activePrivateUserId) return notify("Selecciona una persona de la sala.");
+  try {
+    notify("Preparando imagen...");
+    const image = await prepareChatImage(file);
+    socket.emit("private-chat", { code: currentRoom.code, target: activePrivateUserId, text: "", image }, response => {
+      if (!response?.ok) notify(response?.error || "No se pudo enviar la imagen.");
+    });
+  } catch (error) { notify(error.message); }
+}
+
 function addMessage(message) {
   $("messages").querySelector(".muted")?.remove();
   const div = document.createElement("div");
 
   if (message.author) {
     div.className = "message";
-    div.innerHTML = `<strong>${escapeHtml(message.author)}</strong><p>${escapeHtml(message.text)}</p>`;
+    div.innerHTML = `<strong>${escapeHtml(message.author)}</strong>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
+    bindChatImages(div);
   } else {
     div.className = "system";
     div.textContent = message.text;
@@ -1251,6 +1598,45 @@ $("focusRooms").addEventListener("click", () => {
   $("rooms").scrollIntoView({ behavior: "smooth" });
 });
 
+setupNotificationBell();
+
+$("friendsShortcut").addEventListener("click", openFriendsModal);
+$("closeFriends").addEventListener("click", closeFriendsModal);
+$("friendsModal").querySelector("[data-close-friends]").addEventListener("click", closeFriendsModal);
+
+setupEmojiPicker("roomEmojiBtn", "roomEmojiPicker", "chatInput");
+setupEmojiPicker("privateEmojiBtn", "privateEmojiPicker", "privateChatInput");
+$("roomImageBtn").addEventListener("click", () => $("roomImageInput").click());
+$("privateImageBtn").addEventListener("click", () => $("privateImageInput").click());
+$("roomImageInput").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) sendRoomImage(file); });
+$("privateImageInput").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) sendPrivateImage(file); });
+$("chatInput").addEventListener("paste", event => { const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (file) { event.preventDefault(); sendRoomImage(file); } });
+$("privateChatInput").addEventListener("paste", event => { const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (file) { event.preventDefault(); sendPrivateImage(file); } });
+for (const [zoneId, sender] of [["messages", sendRoomImage], ["privateMessages", sendPrivateImage]]) {
+  const zone = $(zoneId);
+  zone.addEventListener("dragover", event => { event.preventDefault(); zone.classList.add("drop-active"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drop-active"));
+  zone.addEventListener("drop", event => { event.preventDefault(); zone.classList.remove("drop-active"); const file = [...event.dataTransfer.files].find(f => f.type.startsWith("image/")); if (file) sender(file); });
+}
+$("closeImageViewer").addEventListener("click", () => $("imageViewer").classList.add("hidden"));
+$("imageViewer").addEventListener("click", event => { if (event.target === $("imageViewer")) $("imageViewer").classList.add("hidden"); });
+$("privateCallBtn").addEventListener("click", startPrivateCall);
+$("privateHangupBtn").addEventListener("click", () => endPrivateCall(true));
+$("acceptPrivateCall").addEventListener("click", acceptPrivateCallInvite);
+$("rejectPrivateCall").addEventListener("click", rejectPrivateCallInvite);
+
+$("privateChatForm").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!currentRoom || !activePrivateUserId) return notify("Selecciona una persona de la sala.");
+  const input = $("privateChatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit("private-chat", { code: currentRoom.code, target: activePrivateUserId, text }, response => {
+    if (response?.ok) input.value = "";
+    else notify(response?.error || "No se pudo enviar el mensaje privado.");
+  });
+});
+
 $("openProfile").addEventListener("click", openProfileModal);
 $("closeProfile").addEventListener("click", closeProfileModal);
 $("cancelProfile").addEventListener("click", closeProfileModal);
@@ -1307,6 +1693,7 @@ $("voiceJoinBtn").disabled = true;
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && !$("profileModal").classList.contains("hidden")) closeProfileModal();
+  if (event.key === "Escape" && !$("friendsModal").classList.contains("hidden")) closeFriendsModal();
 });
 
 socket.on("connect", () => {
@@ -1317,6 +1704,7 @@ socket.on("connect", () => {
 socket.on("disconnect", () => {
   $("connectedText").textContent = "Desconectado";
   leaveVoiceChat(false);
+  endPrivateCall(false);
 });
 
 socket.on("room-state", room => {
@@ -1407,6 +1795,63 @@ socket.on("voice-signal", async ({ from, data }) => {
     }
   } catch (error) {
     console.error("Error de WebRTC:", error);
+  }
+});
+
+
+socket.on("private-call-invite", ({ from, name }) => {
+  addFriendsNotification("Llamada privada", `${name || "Un usuario"} te está llamando.`, { icon: "📞", userId: from });
+  incomingPrivateCallerId = from;
+  const user = getRoomUser(from);
+  $("incomingPrivateCallText").textContent = `${name || user?.name || "Un usuario"} te está llamando en privado`;
+  $("incomingPrivateCall").classList.remove("hidden");
+  openFriendsModal();
+});
+
+socket.on("private-call-response", async ({ from, accepted }) => {
+  if (from !== privateCallTargetId) return;
+  if (!accepted) { notify("La llamada privada fue rechazada."); return endPrivateCall(false); }
+  try {
+    const peer = createPrivateCallPeer(from);
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socket.emit("private-call-signal", { code: currentRoom.code, target: from, data: { type: "offer", sdp: peer.localDescription } });
+    setPrivateCallUi(true, "Llamada privada activa");
+  } catch (error) { console.error(error); endPrivateCall(true); }
+});
+
+socket.on("private-call-signal", async ({ from, data }) => {
+  if (!currentRoom || from !== privateCallTargetId || !data) return;
+  try {
+    const peer = privateCallPeer || createPrivateCallPeer(from);
+    if (data.type === "offer") {
+      await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      socket.emit("private-call-signal", { code: currentRoom.code, target: from, data: { type: "answer", sdp: peer.localDescription } });
+      setPrivateCallUi(true, "Llamada privada activa");
+    } else if (data.type === "answer") await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    else if (data.type === "candidate" && data.candidate) await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+  } catch (error) { console.error("Llamada privada:", error); }
+});
+
+socket.on("private-call-end", ({ from }) => {
+  if (from === privateCallTargetId) { notify("La llamada privada terminó."); endPrivateCall(false); }
+});
+
+socket.on("private-chat", message => {
+  const otherId = message.from === mySocketId ? message.to : message.from;
+  if (activePrivateUserId === otherId && !$("friendsModal").classList.contains("hidden")) {
+    const current = [...$("privateMessages").querySelectorAll(".private-message")].map(() => null);
+    socket.emit("private-chat-history", { code: currentRoom?.code, target: otherId }, response => {
+      if (response?.ok && activePrivateUserId === otherId) renderPrivateMessages(response.messages || []);
+    });
+  } else if (message.from !== mySocketId) {
+    privateUnread.set(otherId, (privateUnread.get(otherId) || 0) + 1);
+    updatePrivateUnreadBadge();
+    renderFriendsList();
+    addFriendsNotification("Mensaje privado", `${message.author || "Un usuario"} te envió un mensaje.`, { icon: message.image ? "🖼️" : "💬", userId: otherId });
+    notify(`Mensaje privado de ${message.author || "un usuario"}.`);
   }
 });
 

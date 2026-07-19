@@ -3,11 +3,12 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const path = require("path");
+const fs = require("fs");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { maxHttpBufferSize: 6 * 1024 * 1024 });
 
 const PORT = process.env.PORT || 3000;
 
@@ -107,6 +108,33 @@ app.get("/api/youtube/info", async (req, res) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
+const PRIVATE_MESSAGES_FILE = path.join(__dirname, "private-messages.json");
+let persistentPrivateChats = {};
+try {
+  persistentPrivateChats = JSON.parse(fs.readFileSync(PRIVATE_MESSAGES_FILE, "utf8"));
+} catch { persistentPrivateChats = {}; }
+let savePrivateTimer = null;
+function savePersistentPrivateChats() {
+  clearTimeout(savePrivateTimer);
+  savePrivateTimer = setTimeout(() => {
+    try { fs.writeFileSync(PRIVATE_MESSAGES_FILE, JSON.stringify(persistentPrivateChats)); }
+    catch (error) { console.error("No se pudieron guardar los chats privados:", error); }
+  }, 150);
+}
+function safeClientId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+}
+function persistentChatKey(a, b) { return [safeClientId(a), safeClientId(b)].sort().join(":"); }
+
+function sanitizeChatImage(value) {
+  if (!value || typeof value !== "object") return null;
+  const data = String(value.data || "");
+  const name = String(value.name || "imagen").slice(0, 120);
+  const allowed = /^data:image\/(png|jpeg|webp|gif);base64,/i;
+  if (!allowed.test(data) || data.length > 5 * 1024 * 1024) return null;
+  return { data, name };
+}
+
 
 function roomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -131,7 +159,8 @@ function publicRoom(code, room) {
     users: [...room.users.entries()].map(([id, user]) => ({
       id,
       name: user.name,
-      avatar: user.avatar || ""
+      avatar: user.avatar || "",
+      clientId: user.clientId || ""
     })),
     video: room.video,
     playing: room.playing,
@@ -173,14 +202,14 @@ function removeFromRooms(socket) {
 }
 
 io.on("connection", socket => {
-  socket.on("create-room", ({ name, avatar }, callback) => {
+  socket.on("create-room", ({ name, avatar, clientId }, callback) => {
     removeFromRooms(socket);
     const code = roomCode();
     const username = String(name || "Invitado").trim().slice(0, 30);
 
     const room = {
       hostId: socket.id,
-      users: new Map([[socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000) }]]),
+      users: new Map([[socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000), clientId: safeClientId(clientId) || socket.id }]]),
       video: null,
       playing: false,
       time: 0,
@@ -188,7 +217,8 @@ io.on("connection", socket => {
       queue: [],
       waitingForQueue: false,
       voiceUsers: new Set(),
-      chat: []
+      chat: [],
+      privateChats: new Map()
     };
 
     rooms.set(code, room);
@@ -196,7 +226,7 @@ io.on("connection", socket => {
     callback?.({ ok: true, socketId: socket.id, room: publicRoom(code, room) });
   });
 
-  socket.on("join-room", ({ code, name, avatar }, callback) => {
+  socket.on("join-room", ({ code, name, avatar, clientId }, callback) => {
     removeFromRooms(socket);
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
@@ -204,7 +234,7 @@ io.on("connection", socket => {
     if (!room) return callback?.({ ok: false, error: "La sala no existe." });
 
     const username = String(name || "Invitado").trim().slice(0, 30);
-    room.users.set(socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000) });
+    room.users.set(socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000), clientId: safeClientId(clientId) || socket.id });
     socket.join(code);
 
     socket.to(code).emit("system-message", `${username} entró a la sala.`);
@@ -212,7 +242,7 @@ io.on("connection", socket => {
     emitRoom(code);
   });
 
-  socket.on("update-profile", ({ code, name, avatar }, callback) => {
+  socket.on("update-profile", ({ code, name, avatar, clientId }, callback) => {
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id)) {
@@ -222,7 +252,8 @@ io.on("connection", socket => {
     const username = String(name || "Invitado").trim().slice(0, 30);
     room.users.set(socket.id, {
       name: username,
-      avatar: String(avatar || "").slice(0, 500000)
+      avatar: String(avatar || "").slice(0, 500000),
+      clientId: safeClientId(clientId) || room.users.get(socket.id)?.clientId || socket.id
     });
     emitRoom(code);
     callback?.({ ok: true });
@@ -452,18 +483,102 @@ io.on("connection", socket => {
     callback?.({ ok: true });
   });
 
-  socket.on("chat", ({ code, text }, callback) => {
+
+
+  socket.on("private-call-invite", ({ code, target }, callback) => {
+    code = String(code || "").trim().toUpperCase(); target = String(target || "");
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.users.has(target) || target === socket.id) return callback?.({ ok:false, error:"Usuario no disponible." });
+    io.to(target).emit("private-call-invite", { from: socket.id, name: room.users.get(socket.id)?.name || "Invitado" });
+    callback?.({ ok:true });
+  });
+
+  socket.on("private-call-response", ({ code, target, accepted }) => {
+    code = String(code || "").trim().toUpperCase(); target = String(target || "");
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
+    io.to(target).emit("private-call-response", { from: socket.id, accepted: Boolean(accepted) });
+  });
+
+  socket.on("private-call-signal", ({ code, target, data }) => {
+    code = String(code || "").trim().toUpperCase(); target = String(target || "");
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
+    io.to(target).emit("private-call-signal", { from: socket.id, data });
+  });
+
+  socket.on("private-call-end", ({ code, target }) => {
+    code = String(code || "").trim().toUpperCase(); target = String(target || "");
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
+    io.to(target).emit("private-call-end", { from: socket.id });
+  });
+
+  socket.on("private-chat-history", ({ code, target }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    target = String(target || "");
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.users.has(target) || target === socket.id) {
+      return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
+    }
+
+    const me = room.users.get(socket.id);
+    const other = room.users.get(target);
+    const key = persistentChatKey(me?.clientId || socket.id, other?.clientId || target);
+    callback?.({ ok: true, messages: persistentPrivateChats[key] || [] });
+  });
+
+  socket.on("private-chat", ({ code, target, text, image }, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    target = String(target || "");
+    const room = rooms.get(code);
+
+    if (!room || !room.users.has(socket.id) || !room.users.has(target) || target === socket.id) {
+      return callback?.({ ok: false, error: "Ese usuario ya no está disponible." });
+    }
+
+    text = String(text || "").trim().slice(0, 400);
+    image = sanitizeChatImage(image);
+    if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
+
+    const sender = room.users.get(socket.id);
+    const message = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      from: socket.id,
+      to: target,
+      fromClientId: sender?.clientId || socket.id,
+      toClientId: room.users.get(target)?.clientId || target,
+      author: sender?.name || "Invitado",
+      text,
+      image,
+      createdAt: Date.now()
+    };
+
+    const key = persistentChatKey(message.fromClientId, message.toClientId);
+    const history = persistentPrivateChats[key] || [];
+    history.push(message);
+    persistentPrivateChats[key] = history.slice(-150);
+    savePersistentPrivateChats();
+
+    io.to(target).emit("private-chat", message);
+    socket.emit("private-chat", message);
+    callback?.({ ok: true });
+  });
+
+  socket.on("chat", ({ code, text, image }, callback) => {
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
 
-    if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (!room || !room.users.has(socket.id)) return callback?.({ ok: false, error: "Sala no encontrada." });
 
     text = String(text || "").trim().slice(0, 400);
-    if (!text) return callback?.({ ok: false });
+    image = sanitizeChatImage(image);
+    if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
 
     const message = {
       author: room.users.get(socket.id)?.name || "Invitado",
       text,
+      image,
       createdAt: Date.now()
     };
 
