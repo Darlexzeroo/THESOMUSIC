@@ -37,7 +37,7 @@
 
       <button class="profile-card" id="openProfile" type="button">
         <span id="avatar" class="avatar">D</span>
-        <span><strong id="profileName">User</strong><small>En línea <i></i></small></span>
+        <span><strong id="profileName">David</strong><small>En línea <i></i></small></span>
         <b><svg class="ui-icon"><use href="#i-edit"/></svg></b>
       </button>
 
@@ -121,6 +121,11 @@
           <button id="voiceMuteBtn" type="button" class="hidden">🔇 Silenciar</button>
           <button id="voiceLeaveBtn" type="button" class="hidden">Salir</button>
         </div>
+        <label class="voice-volume-control" for="voiceVolumeBar">
+          <span>🔊 Volumen de voces</span>
+          <strong id="voiceVolumeValue">100%</strong>
+          <input id="voiceVolumeBar" type="range" min="0" max="100" value="100" aria-label="Volumen del chat de voz">
+        </label>
         <div id="voiceParticipants" class="voice-participants"></div>
         <div id="remoteAudios" hidden></div>
       </section>
@@ -149,7 +154,7 @@
       <span class="eyebrow">PERSONALIZACIÓN</span><h2>Editar perfil</h2><p>Elige el nombre y la foto que verán los demás.</p>
       <form id="profileForm" class="profile-form">
         <div class="profile-photo-zone"><div id="profilePreview" class="avatar avatar-large">D</div><div><strong>Foto de perfil</strong><small>JPG, PNG o WEBP · máximo 2 MB</small><div class="photo-actions"><label for="profilePhoto">Elegir imagen</label><input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" hidden><button id="removePhoto" type="button">Quitar</button></div></div></div>
-        <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="User placeholder="Tu nombre">
+        <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="David" placeholder="Tu nombre">
         <div class="modal-actions"><button id="cancelProfile" type="button">Cancelar</button><button class="save-profile" type="submit">Guardar cambios</button></div>
       </form>
     </section>

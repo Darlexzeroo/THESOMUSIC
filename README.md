@@ -1,5 +1,5 @@
 # WaveRoom YouTube
-v2
+
 Versión de WaveRoom que reproduce videos con el reproductor oficial de YouTube.
 
 ## Funciones
@@ -149,3 +149,16 @@ Esta versión incluye chat de voz P2P con WebRTC. Los usuarios deben entrar a un
 ## Versión 13: adaptación móvil de salas
 
 En pantallas de hasta 820 px, el bloque para crear una sala o introducir un código se muestra como una tarjeta en la parte superior. También se mantienen visibles los controles de la sala activa y el acceso al perfil.
+
+
+## V14 - Volúmenes separados
+- El volumen de la música controla únicamente YouTube.
+- El volumen de voces controla únicamente el audio recibido del chat WebRTC.
+- Ambos valores se guardan en el navegador y el control de música permanece visible en móvil.
+
+
+## V15: voz activa y volumen individual
+- El icono de cada participante se ilumina cuando habla.
+- Cada participante remoto tiene un control de volumen individual de 0% a 200%.
+- El volumen general del chat de voz sigue funcionando de manera independiente.
+- Los niveles individuales quedan guardados en el navegador.

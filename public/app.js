@@ -20,6 +20,11 @@ let voiceJoined = false;
 let voiceMuted = false;
 const voicePeers = new Map();
 const voiceMutedUsers = new Map();
+const voiceUserVolumes = new Map();
+const voiceAnalysers = new Map();
+const speakingUsers = new Set();
+let voiceMeterFrame = null;
+let voiceOutputVolume = Math.max(0, Math.min(100, Number(localStorage.getItem("waveroom-voice-volume") ?? 100)));
 const rtcConfig = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -438,6 +443,30 @@ function getVoiceUserName(id) {
   return currentRoom?.users?.find(user => user.id === id)?.name || "Usuario";
 }
 
+function getStoredVoiceUserVolume(id) {
+  if (!voiceUserVolumes.has(id)) {
+    const saved = Number(localStorage.getItem(`waveroom-voice-user-${id}`) ?? 100);
+    voiceUserVolumes.set(id, Math.max(0, Math.min(200, saved)));
+  }
+  return voiceUserVolumes.get(id);
+}
+
+function applyVoiceVolume(id) {
+  const audio = document.getElementById(`voice-audio-${id}`);
+  if (!audio) return;
+  const individual = getStoredVoiceUserVolume(id) / 100;
+  audio.volume = Math.max(0, Math.min(1, (voiceOutputVolume / 100) * individual));
+}
+
+function setVoiceUserVolume(id, value) {
+  const safeValue = Math.max(0, Math.min(200, Number(value) || 0));
+  voiceUserVolumes.set(id, safeValue);
+  localStorage.setItem(`waveroom-voice-user-${id}`, String(safeValue));
+  applyVoiceVolume(id);
+  const valueLabel = document.querySelector(`[data-voice-volume-value="${CSS.escape(id)}"]`);
+  if (valueLabel) valueLabel.textContent = `${safeValue}%`;
+}
+
 function updateVoiceUsers(ids = []) {
   const activeIds = Array.isArray(ids) ? ids : [];
   for (const id of [...voicePeers.keys()]) {
@@ -450,18 +479,97 @@ function updateVoiceUsers(ids = []) {
     $("voiceJoinBtn").disabled = true;
   } else if (!voiceJoined) {
     $("voiceStatus").textContent = activeIds.length
-      ? `${activeIds.length} persona${activeIds.length === 1 ? "" : "s"} hablando`
-      : "Nadie está hablando todavía";
+      ? `${activeIds.length} persona${activeIds.length === 1 ? "" : "s"} conectada${activeIds.length === 1 ? "" : "s"}`
+      : "Nadie está en el chat de voz";
     $("voiceJoinBtn").disabled = false;
   } else {
     $("voiceStatus").textContent = voiceMuted ? "Micrófono silenciado" : "Micrófono activo";
   }
 
   $("voiceParticipants").innerHTML = activeIds.map(id => {
-    const name = id === mySocketId ? `${getVoiceUserName(id)} · Tú` : getVoiceUserName(id);
+    const rawName = getVoiceUserName(id);
+    const name = id === mySocketId ? `${rawName} · Tú` : rawName;
     const muted = voiceMutedUsers.get(id) === true;
-    return `<span class="voice-chip${muted ? " muted" : ""}">${escapeHtml(name)}${muted ? " · silenciado" : ""}</span>`;
+    const speaking = speakingUsers.has(id) && !muted;
+    const initial = rawName.trim().charAt(0).toUpperCase() || "U";
+    const volume = id === mySocketId ? 100 : getStoredVoiceUserVolume(id);
+    const controls = id === mySocketId ? "" : `
+      <label class="voice-user-volume" title="Volumen de ${escapeHtml(rawName)}">
+        <span>Volumen</span>
+        <input type="range" min="0" max="200" value="${volume}" data-voice-user="${escapeHtml(id)}" aria-label="Volumen de ${escapeHtml(rawName)}">
+        <strong data-voice-volume-value="${escapeHtml(id)}">${volume}%</strong>
+      </label>`;
+    return `<div class="voice-member${muted ? " muted" : ""}${speaking ? " speaking" : ""}" data-voice-member="${escapeHtml(id)}">
+      <div class="voice-avatar" aria-hidden="true">${escapeHtml(initial)}</div>
+      <div class="voice-member-info"><strong>${escapeHtml(name)}</strong><small>${muted ? "Micrófono silenciado" : speaking ? "Hablando" : "Conectado"}</small></div>
+      ${controls}
+    </div>`;
   }).join("");
+
+  $("voiceParticipants").querySelectorAll("[data-voice-user]").forEach(input => {
+    input.addEventListener("input", event => {
+      setVoiceUserVolume(event.currentTarget.dataset.voiceUser, event.currentTarget.value);
+    });
+  });
+}
+
+function attachVoiceAnalyser(id, stream) {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass || !stream) return;
+    const context = new AudioContextClass();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.55;
+    source.connect(analyser);
+    voiceAnalysers.set(id, { context, source, analyser, data: new Uint8Array(analyser.fftSize) });
+    startVoiceMeter();
+  } catch (error) {
+    console.warn("No se pudo iniciar el indicador de voz:", error);
+  }
+}
+
+function removeVoiceAnalyser(id) {
+  const meter = voiceAnalysers.get(id);
+  if (!meter) return;
+  try { meter.source.disconnect(); } catch {}
+  meter.context.close().catch(() => {});
+  voiceAnalysers.delete(id);
+  speakingUsers.delete(id);
+}
+
+function startVoiceMeter() {
+  if (voiceMeterFrame) return;
+  const tick = () => {
+    let changed = false;
+    for (const [id, meter] of voiceAnalysers.entries()) {
+      meter.analyser.getByteTimeDomainData(meter.data);
+      let sum = 0;
+      for (const value of meter.data) {
+        const normalized = (value - 128) / 128;
+        sum += normalized * normalized;
+      }
+      const level = Math.sqrt(sum / meter.data.length);
+      const speaking = level > 0.035 && voiceMutedUsers.get(id) !== true;
+      if (speaking !== speakingUsers.has(id)) {
+        speaking ? speakingUsers.add(id) : speakingUsers.delete(id);
+        changed = true;
+      }
+      const member = document.querySelector(`[data-voice-member="${CSS.escape(id)}"]`);
+      if (member) {
+        member.classList.toggle("speaking", speaking);
+        const status = member.querySelector("small");
+        if (status && voiceMutedUsers.get(id) !== true) status.textContent = speaking ? "Hablando" : "Conectado";
+      }
+    }
+    if (changed && currentRoom) {
+      // La clase se actualiza directamente para no reconstruir los controles mientras se arrastran.
+    }
+    if (voiceAnalysers.size) voiceMeterFrame = requestAnimationFrame(tick);
+    else voiceMeterFrame = null;
+  };
+  voiceMeterFrame = requestAnimationFrame(tick);
 }
 
 function setVoiceControls(joined) {
@@ -483,6 +591,7 @@ function closeVoicePeer(id) {
     voicePeers.delete(id);
   }
   document.getElementById(`voice-audio-${id}`)?.remove();
+  removeVoiceAnalyser(id);
 }
 
 function createVoicePeer(id) {
@@ -509,9 +618,12 @@ function createVoicePeer(id) {
       audio.id = `voice-audio-${id}`;
       audio.autoplay = true;
       audio.playsInline = true;
+      audio.volume = 1;
       $("remoteAudios").appendChild(audio);
     }
     audio.srcObject = event.streams[0];
+    applyVoiceVolume(id);
+    if (!voiceAnalysers.has(id)) attachVoiceAnalyser(id, event.streams[0]);
     audio.play().catch(() => notify("Toca la pantalla para activar el audio del chat de voz."));
   };
 
@@ -558,6 +670,7 @@ async function joinVoiceChat() {
 
       setVoiceControls(true);
       voiceMutedUsers.set(mySocketId, false);
+      attachVoiceAnalyser(mySocketId, voiceStream);
       $("voiceStatus").textContent = "Micrófono activo";
       notify("Entraste al chat de voz.");
 
@@ -593,6 +706,8 @@ function leaveVoiceChat(notifyServer = true) {
   voiceStream = null;
   [...voicePeers.keys()].forEach(closeVoicePeer);
   voiceMutedUsers.clear();
+  [...voiceAnalysers.keys()].forEach(removeVoiceAnalyser);
+  speakingUsers.clear();
   $("remoteAudios").innerHTML = "";
   setVoiceControls(false);
   if (currentRoom) {
@@ -1136,12 +1251,31 @@ function paintRange(input) {
   input.style.setProperty("--range-progress", `${Number(input.value) || 0}%`);
 }
 
+const savedMusicVolume = Math.max(0, Math.min(100, Number(localStorage.getItem("waveroom-music-volume") ?? $("volumeBar").value)));
+$("volumeBar").value = savedMusicVolume;
 paintRange($("volumeBar"));
 paintRange($("progressBar"));
 
 $("volumeBar").addEventListener("input", () => {
+  const value = Number($("volumeBar").value);
   paintRange($("volumeBar"));
-  if (playerReady) player.setVolume(Number($("volumeBar").value));
+  localStorage.setItem("waveroom-music-volume", String(value));
+  if (playerReady) player.setVolume(value);
+});
+
+$("voiceVolumeBar").value = voiceOutputVolume;
+$("voiceVolumeValue").textContent = `${voiceOutputVolume}%`;
+paintRange($("voiceVolumeBar"));
+
+$("voiceVolumeBar").addEventListener("input", () => {
+  voiceOutputVolume = Number($("voiceVolumeBar").value);
+  $("voiceVolumeValue").textContent = `${voiceOutputVolume}%`;
+  paintRange($("voiceVolumeBar"));
+  localStorage.setItem("waveroom-voice-volume", String(voiceOutputVolume));
+  for (const id of voicePeers.keys()) applyVoiceVolume(id);
+  document.querySelectorAll("#remoteAudios audio").forEach(audio => {
+    audio.volume = voiceOutputVolume / 100;
+  });
 });
 
 $("progressBar").addEventListener("input", () => {
