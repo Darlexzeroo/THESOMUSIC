@@ -9,11 +9,14 @@ let remoteAction = false;
 let syncInterval = null;
 let pendingRoomPlayback = null;
 let userActivatedPlayback = sessionStorage.getItem("waveroom-playback-activated") === "1";
+let searchProvider = "youtube";
+let twitchPausedChannel = "";
 
 const $ = id => document.getElementById(id);
 const username = $("username");
 const toast = $("toast");
 let profilePhotoData = localStorage.getItem("waveroom-photo") || "";
+let profileBannerData = localStorage.getItem("waveroom-banner") || "";
 const persistentClientId = localStorage.getItem("waveroom-client-id") || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 localStorage.setItem("waveroom-client-id", persistentClientId);
 
@@ -230,7 +233,7 @@ function getName() {
 }
 
 function getProfile() {
-  return { name: getName(), avatar: profilePhotoData, clientId: persistentClientId };
+  return { name: getName(), avatar: profilePhotoData, banner: profileBannerData, clientId: persistentClientId };
 }
 
 // Registra esta instalación del navegador en un canal persistente del servidor.
@@ -245,7 +248,8 @@ function registerPersistentClient(callback) {
   socket.emit("register-client", {
     clientId: persistentClientId,
     name: getName(),
-    avatar: profilePhotoData
+    avatar: profilePhotoData,
+    banner: profileBannerData
   }, response => {
     if (!response?.ok) {
       console.warn("No se pudo registrar el cliente persistente:", response?.error || "Error desconocido");
@@ -257,14 +261,34 @@ function registerPersistentClient(callback) {
 function applyAvatar(element, name = getName(), avatar = profilePhotoData) {
   if (!element) return;
   element.textContent = avatar ? "" : (name[0]?.toUpperCase() || "?");
-  element.style.backgroundImage = avatar ? `url("${avatar}")` : "";
+  if (avatar) {
+    element.style.setProperty("background-image", `url("${avatar}")`, "important");
+    element.style.backgroundColor = "transparent";
+    element.dataset.hasAvatar = "true";
+  } else {
+    element.style.removeProperty("background-image");
+    element.style.removeProperty("background-color");
+    delete element.dataset.hasAvatar;
+  }
+}
+
+function applyProfileBanner(element, banner = profileBannerData) {
+  if (!element) return;
+  element.style.backgroundImage = banner ? `url("${banner}")` : "";
+  element.classList.toggle("has-image", Boolean(banner));
 }
 
 function refreshProfileUI() {
   $("profileName").textContent = getName();
+  if ($("miniProfileName")) $("miniProfileName").textContent = getName();
+  if ($("profilePreviewName")) $("profilePreviewName").textContent = getName();
   applyAvatar($("avatar"));
   applyAvatar($("miniAvatar"));
+  applyProfileBanner($("miniProfileBanner"));
   applyAvatar($("profilePreview"));
+  applyProfileBanner($("profileBannerPreview"));
+  applyProfileBanner($("profileCardBanner"));
+  document.documentElement.style.setProperty("--profile-banner-image", profileBannerData ? `url("${profileBannerData}")` : "none");
 }
 
 
@@ -285,7 +309,7 @@ function updateTrackUI(video) {
   $("nowPlaying").textContent = video.title || "Video de YouTube";
   $("trackChannel").textContent = video.channel || "YouTube";
   $("videoStageTitle").textContent = video.title || "Video de YouTube";
-  const thumb = video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
+  const thumb = video.thumbnail || (video.provider === "twitch" ? "" : `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`);
   $("trackCover").style.backgroundImage = `url("${thumb}")`;
   $("trackCover").textContent = "";
 }
@@ -335,11 +359,27 @@ async function ensureVoiceStream() {
   return voiceStream;
 }
 
+function updatePrivateCallPanel(active = privateCallActive, text = $("privateCallStatus")?.textContent || "Chat privado") {
+  const widget = document.querySelector(".private-call-widget");
+  const name = $("privateChatName")?.textContent || "Usuario";
+  const initial = (name.trim()[0] || "?").toUpperCase();
+  widget?.classList.toggle("is-active", Boolean(active));
+  $("privateCallLiveDot")?.classList.toggle("active", Boolean(active));
+  if ($("privateCallPanelTitle")) $("privateCallPanelTitle").textContent = active ? "Llamada privada" : "Sin llamada activa";
+  if ($("privateCallPanelStatus")) $("privateCallPanelStatus").textContent = text;
+  if ($("privateCallPanelName")) $("privateCallPanelName").textContent = active ? name : "Llamadas uno a uno";
+  if ($("privateCallPanelAvatar")) $("privateCallPanelAvatar").textContent = active ? initial : "☎";
+  if ($("privateCallPanelHint")) $("privateCallPanelHint").textContent = active ? "La llamada es privada entre ustedes dos." : "Aquí aparecerán los controles cuando estés en una llamada privada.";
+  if ($("privateCallPanelMute")) $("privateCallPanelMute").disabled = !active;
+  if ($("privateCallPanelHangup")) $("privateCallPanelHangup").disabled = !active;
+}
+
 function setPrivateCallUi(active, text = "Chat privado") {
   privateCallActive = active;
   $("privateCallBtn").classList.toggle("hidden", active);
   $("privateHangupBtn").classList.toggle("hidden", !active);
   $("privateCallStatus").textContent = text;
+  updatePrivateCallPanel(active, text);
 }
 
 function closePrivateCallPeer() {
@@ -406,11 +446,32 @@ function endPrivateCall(notifyServer = true) {
   if (notifyServer && currentRoom && privateCallTargetId) socket.emit("private-call-end", { code: currentRoom.code, target: privateCallTargetId });
   closePrivateCallPeer();
   privateCallTargetId = null;
+  voiceMuted = false;
+  if ($("privateCallPanelMute")) $("privateCallPanelMute").textContent = "🔇 Silenciar";
   setPrivateCallUi(false, "Chat privado");
   if (!voiceJoined) { voiceStream?.getTracks().forEach(t => t.stop()); voiceRawStream?.getTracks().forEach(t => t.stop()); closeVoiceFilterGraph(); voiceStream = null; voiceRawStream = null; }
 }
 
+function openRoomModal() {
+  document.body.classList.remove("mobile-menu-open");
+  $("sidebarBackdrop")?.classList.add("hidden");
+  $("mobileMenuBtn")?.setAttribute("aria-expanded", "false");
+  $("roomModal").classList.remove("hidden");
+  document.body.classList.add("modal-open", "room-open");
+  document.documentElement.classList.add("room-open");
+  requestAnimationFrame(() => scrollRoomMessages(true));
+}
+
+function closeRoomModal() {
+  $("roomModal").classList.add("hidden");
+  document.body.classList.remove("modal-open", "room-open");
+  document.documentElement.classList.remove("room-open");
+}
+
 function openFriendsModal() {
+  document.body.classList.remove("mobile-menu-open");
+  $("sidebarBackdrop")?.classList.add("hidden");
+  $("mobileMenuBtn")?.setAttribute("aria-expanded", "false");
   $("friendsModal").classList.remove("hidden");
   document.body.classList.add("modal-open", "friends-open");
   document.documentElement.classList.add("friends-open");
@@ -547,6 +608,7 @@ function openPrivateChatByClient(clientId) {
   $("privateCallBtn").disabled = !activePrivateUserId || !currentRoom;
   $("privateCallBtn").title = activePrivateUserId && currentRoom ? "Llamar en privado" : "La llamada requiere que ambos estén en la misma sala";
   $("privateCallStatus").textContent = activePrivateUserId && currentRoom ? "Chat privado · Disponible para llamada" : "Chat privado guardado";
+  updatePrivateCallPanel(privateCallActive, $("privateCallStatus").textContent);
   const avatar = $("privateChatAvatar");
   avatar.textContent = user.avatar ? "" : (user.name?.[0]?.toUpperCase() || "?");
   avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
@@ -575,7 +637,26 @@ function resetPrivateChat() {
   renderFriendsList();
 }
 
-function openProfileModal() {
+function selectSettingsTab(tab = "profile") {
+  const selected = tab === "theme" ? "theme" : "profile";
+  document.querySelectorAll("[data-settings-tab]").forEach(button => {
+    const active = button.dataset.settingsTab === selected;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll("[data-settings-panel]").forEach(panel => {
+    panel.classList.toggle("active", panel.dataset.settingsPanel === selected);
+  });
+}
+
+document.querySelectorAll("[data-settings-tab]").forEach(button => {
+  button.addEventListener("click", () => selectSettingsTab(button.dataset.settingsTab));
+});
+
+function openProfileModal(tab = "profile") {
+  document.body.classList.remove("mobile-menu-open");
+  $("sidebarBackdrop")?.classList.add("hidden");
+  $("mobileMenuBtn")?.setAttribute("aria-expanded", "false");
   $("profileModal").classList.remove("hidden");
   document.body.classList.add("modal-open");
   username.focus();
@@ -586,28 +667,58 @@ function closeProfileModal() {
   document.body.classList.remove("modal-open");
 }
 
-function resizeProfileImage(file) {
+function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error("La imagen no es válida."));
-      image.onload = () => {
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareProfileImage(file, type = "avatar") {
+  const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+  if (!allowed.includes(file.type)) throw new Error("Formato no compatible. Usa JPG, PNG, WEBP o GIF.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("La imagen debe pesar menos de 5 MB.");
+
+  // Los GIF se conservan sin pasarlos por canvas para no perder la animación.
+  if (file.type === "image/gif") return readFileAsDataURL(file);
+
+  const dataUrl = await readFileAsDataURL(file);
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error("La imagen no es válida."));
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) return reject(new Error("No se pudo procesar la imagen."));
+
+      if (type === "banner") {
+        canvas.width = 900;
+        canvas.height = 360;
+        const targetRatio = canvas.width / canvas.height;
+        const imageRatio = image.width / image.height;
+        let sx = 0, sy = 0, sw = image.width, sh = image.height;
+        if (imageRatio > targetRatio) {
+          sw = image.height * targetRatio;
+          sx = (image.width - sw) / 2;
+        } else {
+          sh = image.width / targetRatio;
+          sy = (image.height - sh) / 2;
+        }
+        context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      } else {
         const size = 320;
-        const canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size;
-        const context = canvas.getContext("2d");
         const crop = Math.min(image.width, image.height);
         const sx = (image.width - crop) / 2;
         const sy = (image.height - crop) / 2;
         context.drawImage(image, sx, sy, crop, crop, 0, 0, size, size);
-        resolve(canvas.toDataURL("image/jpeg", .82));
-      };
-      image.src = reader.result;
+      }
+      resolve(canvas.toDataURL("image/webp", .82));
     };
-    reader.readAsDataURL(file);
+    image.src = dataUrl;
   });
 }
 
@@ -637,6 +748,45 @@ function parseYouTubeId(value) {
 
   const match = value.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/);
   return match?.[1] || null;
+}
+
+function parseTwitchChannel(value) {
+  value = String(value || "").trim();
+  if (/^[a-zA-Z0-9_]{2,30}$/.test(value) && !value.includes(" ")) return value.toLowerCase();
+  try {
+    const url = new URL(value);
+    if (!/(^|\.)twitch\.tv$/i.test(url.hostname)) return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (!parts.length || ["videos", "directory", "downloads", "settings"].includes(parts[0].toLowerCase())) return null;
+    return parts[0].toLowerCase();
+  } catch {}
+  return null;
+}
+
+function showTwitchChannel(channel, autoplay = true) {
+  const frame = $("twitchPlayer");
+  const yt = $("youtubePlayer");
+  if (!frame || !channel) return;
+  yt.classList.add("hidden");
+  frame.classList.remove("hidden");
+  const parent = encodeURIComponent(location.hostname || "localhost");
+  // Twitch permite autoplay de forma más fiable si inicia silenciado.
+  // El usuario puede activar el audio dentro del reproductor sin detener el directo.
+  const muted = autoplay ? "true" : "false";
+  frame.src = `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${parent}&autoplay=${autoplay ? "true" : "false"}&muted=${muted}`;
+  twitchPausedChannel = autoplay ? "" : channel;
+  if (autoplay) {
+    document.body.classList.add("is-playing");
+    updatePlayButtonState(true);
+    hideActivationButton();
+  }
+}
+
+function showYouTubePlayer() {
+  $("twitchPlayer")?.classList.add("hidden");
+  const frame = $("twitchPlayer");
+  if (frame) frame.src = "about:blank";
+  $("youtubePlayer")?.classList.remove("hidden");
 }
 
 function waitForPlayer(timeout = 10000) {
@@ -690,6 +840,16 @@ async function applyRoomPlayback(video, time = 0, playing = true) {
   if (!video) return;
 
   pendingRoomPlayback = { video, time, playing };
+  currentVideo = video;
+  updateTrackUI(video);
+  if (video.provider === "twitch") {
+    showTwitchChannel(video.id, playing);
+    document.body.classList.toggle("is-playing", playing);
+    updatePlayButtonState(playing);
+    pendingRoomPlayback = null;
+    return;
+  }
+  showYouTubePlayer();
   await waitForPlayer();
 
   remoteAction = true;
@@ -746,6 +906,7 @@ window.onYouTubeIframeAPIReady = function () {
       onStateChange: event => {
         if (event.data === YT.PlayerState.PLAYING) {
           document.body.classList.add("is-playing");
+          updatePlayButtonState(true);
           hideActivationButton();
           userActivatedPlayback = true;
           sessionStorage.setItem("waveroom-playback-activated", "1");
@@ -753,6 +914,7 @@ window.onYouTubeIframeAPIReady = function () {
 
         if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
           document.body.classList.remove("is-playing");
+          updatePlayButtonState(false);
         }
 
         if (remoteAction || !currentRoom || !isHost()) return;
@@ -793,7 +955,12 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
   if (!video) return;
   currentVideo = video;
   updateTrackUI(video);
-
+  if (video.provider === "twitch") {
+    showTwitchChannel(video.id, autoplay);
+    updatePlayButtonState(autoplay);
+    return;
+  }
+  showYouTubePlayer();
   await waitForPlayer();
 
   if (autoplay) {
@@ -820,17 +987,20 @@ function renderRoom(room) {
   $("roleBadge").textContent = isHost() ? "Controlas la sala" : "Escuchando en sala";
 
   $("people").innerHTML = room.users.map(user => `
-    <div class="person">
+    <div class="person${user.banner ? " has-banner" : ""}" data-room-person="${escapeHtml(user.id)}" style="${user.banner ? `--room-user-banner:url('${escapeHtml(user.banner)}')` : ""}">
+      <div class="person-banner" aria-hidden="true"></div>
       <div class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name[0]?.toUpperCase() || "?")}</div>
-      <div>
-        <strong>${escapeHtml(user.name)}</strong><br>
+      <div class="person-details">
+        <strong>${escapeHtml(user.name)}</strong>
         <span>${user.id === room.hostId ? "Anfitrión" : "Oyente"}${user.id === mySocketId ? " · Tú" : ""}</span>
       </div>
     </div>
   `).join("");
+  refreshRoomSpeakingIndicators();
 
   $("queueCount").textContent = room.queue.length;
   $("chatCount").textContent = room.users.length;
+  if ($("railChatCount")) $("railChatCount").textContent = room.users.length;
   renderFriendsList();
   if (activePrivateClientId) { const active = room.users.find(user => (user.clientId || user.id) === activePrivateClientId); activePrivateUserId = active?.id || null; }
   $("queue").innerHTML = room.queue.length ? room.queue.map(video => `
@@ -878,12 +1048,15 @@ function resetRoomUI() {
   $("people").innerHTML = "";
   $("queueCount").textContent = "0";
   $("chatCount").textContent = "0";
+  if ($("railChatCount")) $("railChatCount").textContent = "0";
   $("queue").innerHTML = `<div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div>`;
   $("messages").innerHTML = `<p class="muted">Entra a una sala para conversar.</p>`;
+  if ($("railMessages")) $("railMessages").innerHTML = `<p class="empty-state">Entra a una sala para conversar.</p>`;
   if (privateCallTargetId || privateCallActive) endPrivateCall(true);
   activePrivateUserId = null;
   loadPrivateConversations();
   delete $("messages").dataset.loaded;
+  if ($("railMessages")) delete $("railMessages").dataset.loaded;
   clearInterval(syncInterval);
 }
 
@@ -920,6 +1093,16 @@ function startSync() {
       setTimeout(() => remoteAction = false, 300);
     });
   }, 3500);
+}
+
+function refreshRoomSpeakingIndicators() {
+  const canSeeSpeaking = voiceJoined;
+  document.querySelectorAll("[data-room-person]").forEach(person => {
+    const id = person.dataset.roomPerson;
+    const isInVoiceCall = voiceAnalysers.has(id) || id === mySocketId;
+    const isSpeaking = canSeeSpeaking && isInVoiceCall && speakingUsers.has(id) && voiceMutedUsers.get(id) !== true;
+    person.classList.toggle("speaking", isSpeaking);
+  });
 }
 
 function getVoiceUserName(id) {
@@ -1020,6 +1203,7 @@ function removeVoiceAnalyser(id) {
   meter.context.close().catch(() => {});
   voiceAnalysers.delete(id);
   speakingUsers.delete(id);
+  refreshRoomSpeakingIndicators();
 }
 
 function startVoiceMeter() {
@@ -1047,7 +1231,7 @@ function startVoiceMeter() {
       }
     }
     if (changed && currentRoom) {
-      // La clase se actualiza directamente para no reconstruir los controles mientras se arrastran.
+      refreshRoomSpeakingIndicators();
     }
     if (voiceAnalysers.size) voiceMeterFrame = requestAnimationFrame(tick);
     else voiceMeterFrame = null;
@@ -1057,6 +1241,7 @@ function startVoiceMeter() {
 
 function setVoiceControls(joined) {
   voiceJoined = joined;
+  refreshRoomSpeakingIndicators();
   $("voiceJoinBtn").classList.toggle("hidden", joined);
   $("voiceMuteBtn").classList.toggle("hidden", !joined);
   $("voiceLeaveBtn").classList.toggle("hidden", !joined);
@@ -1401,38 +1586,37 @@ async function sendPrivateImage(file) {
 }
 
 function scrollRoomChatToBottom(behavior = "smooth") {
-  const box = $("messages");
-  if (!box) return;
-  const move = () => {
-    try {
-      box.scrollTo({ top: box.scrollHeight, behavior });
-    } catch (_) {
-      box.scrollTop = box.scrollHeight;
-    }
-  };
-  requestAnimationFrame(() => {
-    move();
-    requestAnimationFrame(move);
+  [$("messages"), $("railMessages")].filter(Boolean).forEach(box => {
+    const move = () => {
+      try { box.scrollTo({ top: box.scrollHeight, behavior }); }
+      catch (_) { box.scrollTop = box.scrollHeight; }
+    };
+    requestAnimationFrame(() => { move(); requestAnimationFrame(move); });
   });
 }
 
-function addMessage(message) {
-  $("messages").querySelector(".muted")?.remove();
+function buildRoomMessage(message) {
   const div = document.createElement("div");
-
   if (message.author) {
     div.className = "message";
     div.innerHTML = `<strong>${escapeHtml(message.author)}</strong>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
     bindChatImages(div);
-    div.querySelectorAll("img").forEach(img => {
-      if (!img.complete) img.addEventListener("load", () => scrollRoomChatToBottom("auto"), { once: true });
-    });
   } else {
     div.className = "system";
     div.textContent = message.text;
   }
+  return div;
+}
 
-  $("messages").appendChild(div);
+function addMessage(message) {
+  [$("messages"), $("railMessages")].filter(Boolean).forEach(box => {
+    box.querySelector(".muted, .empty-state")?.remove();
+    const div = buildRoomMessage(message);
+    div.querySelectorAll("img").forEach(img => {
+      if (!img.complete) img.addEventListener("load", () => scrollRoomChatToBottom("auto"), { once: true });
+    });
+    box.appendChild(div);
+  });
   scrollRoomChatToBottom();
 }
 
@@ -1552,6 +1736,7 @@ async function searchYouTube(query) {
       const item = results[Number(index)];
 
       return {
+        provider: "youtube",
         id: item.id,
         title: decodeHtmlEntities(item.title),
         channel: decodeHtmlEntities(item.channel),
@@ -1576,8 +1761,6 @@ async function searchYouTube(query) {
 
           $("youtubeUrl").value =
             `https://www.youtube.com/watch?v=${video.id}`;
-          $("videoTitle").value = video.title;
-
           await startSelectedVideo(video);
         });
       });
@@ -1588,11 +1771,44 @@ async function searchYouTube(query) {
   }
 }
 
+async function searchTwitch(query) {
+  const status = $("searchStatus");
+  const resultsContainer = $("searchResults");
+  status.textContent = "Buscando canales en directo en Twitch...";
+  resultsContainer.innerHTML = "";
+  try {
+    const response = await fetch(`/api/twitch/search?q=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo buscar en Twitch.");
+    const results = data.results || [];
+    if (!results.length) {
+      status.textContent = "No se encontraron canales en directo.";
+      resultsContainer.innerHTML = `<div class="search-empty">Prueba con el nombre exacto del canal.</div>`;
+      return;
+    }
+    status.textContent = `${results.length} directos encontrados.`;
+    resultsContainer.innerHTML = results.map((item,index)=>`<article class="search-result live-result"><img src="${escapeHtml(item.thumbnail)}" alt=""><div class="search-result-info"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.channel)} · ${escapeHtml(item.category || "Twitch")} · ${Number(item.viewers||0).toLocaleString()} espectadores</span><b class="live-badge">EN VIVO</b><div class="search-result-actions"><button class="queue-result-btn" type="button" data-twitch-queue="${index}">+ Agregar a cola</button><button class="play-result-btn" type="button" data-twitch-play="${index}">Reproducir ahora</button></div></div></article>`).join("");
+    const toVideo=i=>({ ...results[Number(i)], provider:"twitch", live:true });
+    resultsContainer.querySelectorAll("[data-twitch-queue]").forEach(btn=>btn.addEventListener("click",()=>addVideoToQueue(toVideo(btn.dataset.twitchQueue))));
+    resultsContainer.querySelectorAll("[data-twitch-play]").forEach(btn=>btn.addEventListener("click",()=>startSelectedVideo(toVideo(btn.dataset.twitchPlay))));
+  } catch(error) {
+    status.textContent = error.message;
+    resultsContainer.innerHTML = `<div class="search-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function videoFromTwitchLink(value) {
+  const channel = parseTwitchChannel(value);
+  if (!channel) return null;
+  return { provider:"twitch", id:channel, title:`${channel} en directo`, channel, thumbnail:"", live:true };
+}
+
 async function videoFromYouTubeLink(value, optionalTitle = "") {
   const id = parseYouTubeId(value);
   if (!id) return null;
 
   const fallback = {
+    provider: "youtube",
     id,
     title: optionalTitle.trim() || "Video de YouTube",
     channel: "YouTube",
@@ -1607,6 +1823,7 @@ async function videoFromYouTubeLink(value, optionalTitle = "") {
     if (!response.ok) return fallback;
 
     return {
+      provider: "youtube",
       id,
       title: optionalTitle.trim() || data.title || fallback.title,
       channel: data.channel || fallback.channel,
@@ -1635,14 +1852,39 @@ $("searchForm").addEventListener("submit", async event => {
   $("searchMirror").value = query;
 
   if (!query) {
-    return notify("Escribe el nombre de una canción o pega un enlace de YouTube.");
+    return notify(searchProvider === "twitch" ? "Escribe el nombre de un canal de Twitch." : "Escribe una canción o pega un enlace de YouTube.");
   }
 
-  // Si se pega un enlace en el buscador, se agrega directamente a la cola.
-  if (parseYouTubeId(query)) {
+  const isTwitchUrl = /(?:^|\.)twitch\.tv/i.test((() => { try { return new URL(query).hostname; } catch { return ""; } })());
+  const isYouTubeUrl = Boolean(parseYouTubeId(query));
+
+  if (searchProvider === "twitch") {
+    if (isYouTubeUrl) {
+      $("searchStatus").textContent = "Ese enlace es de YouTube. Cambia a la pestaña YouTube.";
+      return notify("Ese enlace pertenece a YouTube.");
+    }
+    if (isTwitchUrl) {
+      const video = videoFromTwitchLink(query);
+      if (!video) return notify("El enlace de Twitch no es válido.");
+      await startSelectedVideo(video);
+      $("searchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+      $("searchResults").innerHTML = "";
+      $("searchInput").value = "";
+      $("searchMirror").value = "";
+      return;
+    }
+    await searchTwitch(query);
+    return;
+  }
+
+  if (isTwitchUrl) {
+    $("searchStatus").textContent = "Ese enlace es de Twitch. Cambia a la pestaña Twitch.";
+    return notify("Ese enlace pertenece a Twitch.");
+  }
+  if (isYouTubeUrl) {
     const added = await addYouTubeLinkDirectlyToQueue(query);
     if (added) {
-      $("searchStatus").textContent = "Enlace agregado directamente a la cola.";
+      $("searchStatus").textContent = "Enlace de YouTube agregado directamente a la cola.";
       $("searchResults").innerHTML = "";
       $("searchInput").value = "";
       $("searchMirror").value = "";
@@ -1659,30 +1901,65 @@ function selectedVideo() {
 
   return {
     id,
-    title: $("videoTitle").value.trim() || "Video de YouTube"
+    title: "Video de YouTube"
   };
 }
 
 $("videoForm").addEventListener("submit", async event => {
   event.preventDefault();
   const url = $("youtubeUrl").value.trim();
-  const title = $("videoTitle").value.trim();
-  const added = await addYouTubeLinkDirectlyToQueue(url, title);
+  if (!url) return notify("Pega un enlace primero.");
 
+  const twitchVideo = videoFromTwitchLink(url);
+  const youtubeId = parseYouTubeId(url);
+
+  if (searchProvider === "twitch") {
+    if (youtubeId) return notify("Ese enlace es de YouTube. Usa la pestaña YouTube.");
+    if (!twitchVideo || !/twitch\.tv/i.test(url)) return notify("Pega un enlace válido de Twitch.");
+    await startSelectedVideo(twitchVideo);
+    $("youtubeUrl").value = "";
+    $("searchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+    return;
+  }
+
+  if (twitchVideo && /twitch\.tv/i.test(url)) return notify("Ese enlace es de Twitch. Usa la pestaña Twitch.");
+  if (!youtubeId) return notify("Pega un enlace válido de YouTube.");
+  const added = await addYouTubeLinkDirectlyToQueue(url);
   if (added) {
     $("youtubeUrl").value = "";
-    $("videoTitle").value = "";
-    $("searchStatus").textContent = "Enlace agregado directamente a la cola.";
+    $("searchStatus").textContent = "Enlace de YouTube agregado directamente a la cola.";
   }
 });
 
-$("playBtn").addEventListener("click", async () => {
-  if (!currentVideo) return notify("Primero selecciona un video.");
-  if (currentRoom && !isHost()) return notify("Solo el anfitrión controla la reproducción.");
+function updatePlayButtonState(playing) {
+  const icon = $("playBtnIcon");
+  const button = $("playBtn");
+  if (icon) icon.setAttribute("href", playing ? "#i-pause" : "#i-play");
+  if (button) button.title = playing ? "Pausar" : "Reproducir";
+}
 
+$("playBtn").addEventListener("click", async () => {
+  if (!currentVideo) return notify("Primero selecciona un video o directo.");
+  if (currentRoom && !isHost()) return notify("Solo el anfitrión controla la reproducción.");
+  const isPlaying = document.body.classList.contains("is-playing");
+  if (currentVideo.provider === "twitch") {
+    if (isPlaying) {
+      twitchPausedChannel = currentVideo.id;
+      $("twitchPlayer").src = "about:blank";
+      document.body.classList.remove("is-playing");
+      updatePlayButtonState(false);
+      if (currentRoom) socket.emit("player-action", { code: currentRoom.code, action: "pause", time: 0 });
+    } else {
+      showTwitchChannel(currentVideo.id, true);
+      document.body.classList.add("is-playing");
+      updatePlayButtonState(true);
+      if (currentRoom) socket.emit("player-action", { code: currentRoom.code, action: "play", time: 0 });
+    }
+    return;
+  }
   userActivatedPlayback = true;
   sessionStorage.setItem("waveroom-playback-activated", "1");
-  await playCurrentVideo();
+  if (isPlaying) player.pauseVideo(); else await playCurrentVideo();
 });
 
 $("activateAudioBtn").addEventListener("click", async () => {
@@ -1702,11 +1979,7 @@ $("activateAudioBtn").addEventListener("click", async () => {
   hideActivationButton();
 });
 
-$("pauseBtn").addEventListener("click", () => {
-  if (!playerReady) return;
-  if (currentRoom && !isHost()) return notify("Solo el anfitrión controla la reproducción.");
-  player.pauseVideo();
-});
+
 
 $("syncBtn").addEventListener("click", () => {
   if (!currentRoom) return notify("No estás en una sala.");
@@ -1810,9 +2083,20 @@ $("chatForm").addEventListener("submit", event => {
   });
 });
 
-$("focusRooms").addEventListener("click", () => {
-  $("rooms").scrollIntoView({ behavior: "smooth" });
+$("railChatForm")?.addEventListener("submit", event => {
+  event.preventDefault();
+  if (!currentRoom) return notify("Primero entra a una sala.");
+  const input = $("railChatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit("chat", { code: currentRoom.code, text }, response => {
+    if (response?.ok) input.value = "";
+  });
 });
+
+$("focusRooms").addEventListener("click", openRoomModal);
+$("closeRoomModal").addEventListener("click", closeRoomModal);
+$("roomModal").querySelector("[data-close-room]").addEventListener("click", closeRoomModal);
 
 setupNotificationBell();
 window.addEventListener("pointerdown", () => {
@@ -1828,14 +2112,18 @@ $("closeFriends").addEventListener("click", closeFriendsModal);
 $("friendsModal").querySelector("[data-close-friends]").addEventListener("click", closeFriendsModal);
 
 setupEmojiPicker("roomEmojiBtn", "roomEmojiPicker", "chatInput");
+setupEmojiPicker("railEmojiBtn", "railEmojiPicker", "railChatInput");
 setupEmojiPicker("privateEmojiBtn", "privateEmojiPicker", "privateChatInput");
 $("roomImageBtn").addEventListener("click", () => $("roomImageInput").click());
+$("railImageBtn")?.addEventListener("click", () => $("railImageInput")?.click());
 $("privateImageBtn").addEventListener("click", () => $("privateImageInput").click());
 $("roomImageInput").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) sendRoomImage(file); });
+$("railImageInput")?.addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) sendRoomImage(file); });
 $("privateImageInput").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) sendPrivateImage(file); });
 $("chatInput").addEventListener("paste", event => { const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (file) { event.preventDefault(); sendRoomImage(file); } });
+$("railChatInput")?.addEventListener("paste", event => { const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (file) { event.preventDefault(); sendRoomImage(file); } });
 $("privateChatInput").addEventListener("paste", event => { const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (file) { event.preventDefault(); sendPrivateImage(file); } });
-for (const [zoneId, sender] of [["messages", sendRoomImage], ["privateMessages", sendPrivateImage]]) {
+for (const [zoneId, sender] of [["messages", sendRoomImage], ["railMessages", sendRoomImage], ["privateMessages", sendPrivateImage]]) {
   const zone = $(zoneId);
   zone.addEventListener("dragover", event => { event.preventDefault(); zone.classList.add("drop-active"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("drop-active"));
@@ -1847,6 +2135,15 @@ $("privateCallBtn").addEventListener("click", startPrivateCall);
 $("privateHangupBtn").addEventListener("click", () => endPrivateCall(true));
 $("acceptPrivateCall").addEventListener("click", acceptPrivateCallInvite);
 $("rejectPrivateCall").addEventListener("click", rejectPrivateCallInvite);
+$("privateCallPanelHangup").addEventListener("click", () => endPrivateCall(true));
+$("privateCallPanelMute").addEventListener("click", () => {
+  if (!privateCallActive || !voiceStream) return;
+  voiceMuted = !voiceMuted;
+  voiceStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+  $("privateCallPanelMute").textContent = voiceMuted ? "🎙 Activar micrófono" : "🔇 Silenciar";
+  $("privateCallStatus").textContent = voiceMuted ? "Micrófono silenciado" : "Llamada privada activa";
+  updatePrivateCallPanel(true, $("privateCallStatus").textContent);
+});
 
 $("privateChatForm").addEventListener("submit", event => {
   event.preventDefault();
@@ -1874,13 +2171,13 @@ $("profileModal").querySelector("[data-close-profile]").addEventListener("click"
 $("profilePhoto").addEventListener("change", async event => {
   const file = event.target.files?.[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
+  if (file.size > 5 * 1024 * 1024) {
     event.target.value = "";
-    return notify("La foto debe pesar menos de 2 MB.");
+    return notify("La foto debe pesar menos de 5 MB.");
   }
 
   try {
-    profilePhotoData = await resizeProfileImage(file);
+    profilePhotoData = await prepareProfileImage(file, "avatar");
     applyAvatar($("profilePreview"));
   } catch (error) {
     notify(error.message);
@@ -1893,8 +2190,27 @@ $("removePhoto").addEventListener("click", () => {
   applyAvatar($("profilePreview"));
 });
 
+$("profileBanner").addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    profileBannerData = await prepareProfileImage(file, "banner");
+    applyProfileBanner($("profileBannerPreview"));
+  } catch (error) {
+    event.target.value = "";
+    notify(error.message);
+  }
+});
+
+$("removeBanner").addEventListener("click", () => {
+  profileBannerData = "";
+  $("profileBanner").value = "";
+  applyProfileBanner($("profileBannerPreview"));
+});
+
 username.addEventListener("input", () => {
   applyAvatar($("profilePreview"), getName(), profilePhotoData);
+  if ($("profilePreviewName")) $("profilePreviewName").textContent = getName();
 });
 
 $("profileForm").addEventListener("submit", event => {
@@ -1902,12 +2218,18 @@ $("profileForm").addEventListener("submit", event => {
   const name = getName();
   username.value = name;
   localStorage.setItem("waveroom-name", name);
-  if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
-  else localStorage.removeItem("waveroom-photo");
+  try {
+    if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
+    else localStorage.removeItem("waveroom-photo");
+    if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
+    else localStorage.removeItem("waveroom-banner");
+  } catch {
+    return notify("No se pudo guardar: reduce el peso del GIF o del banner.");
+  }
   refreshProfileUI();
-setVoiceControls(false);
-$("voiceJoinBtn").disabled = true;
 
+  // Actualizar el perfil no debe desconectar ni reiniciar el chat de voz.
+  // Se conserva el micrófono, los peers WebRTC, el estado de silencio y los controles.
   if (currentRoom) {
     socket.emit("update-profile", { code: currentRoom.code, ...getProfile() }, response => {
       if (!response?.ok) return notify(response?.error || "No se pudo actualizar el perfil.");
@@ -1921,8 +2243,22 @@ $("voiceJoinBtn").disabled = true;
 });
 
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && !$("profileModal").classList.contains("hidden")) closeProfileModal();
-  if (event.key === "Escape" && !$("friendsModal").classList.contains("hidden")) closeFriendsModal();
+  if (event.key !== "Escape") return;
+
+  // Salas se cierra igual que los demás paneles, sin abandonar la llamada grupal.
+  if (!$("roomModal").classList.contains("hidden")) {
+    closeRoomModal();
+    return;
+  }
+
+  if (!$("profileModal").classList.contains("hidden")) {
+    closeProfileModal();
+    return;
+  }
+
+  if (!$("friendsModal").classList.contains("hidden")) {
+    closeFriendsModal();
+  }
 });
 
 socket.on("connect", () => {
@@ -2141,9 +2477,8 @@ $("voiceLeaveBtn").addEventListener("click", () => {
 });
 
 // Controles y accesos visuales del nuevo diseño.
-$("profileShortcut").addEventListener("click", openProfileModal);
-$("miniProfile").addEventListener("click", openProfileModal);
-$("focusSearch").addEventListener("click", () => $("searchSection").scrollIntoView({ behavior: "smooth" }));
+$("miniProfile").addEventListener("click", () => openProfileModal("profile"));
+$("settingsShortcut")?.addEventListener("click", () => openProfileModal("theme"));
 
 $("searchMirrorBtn").addEventListener("click", () => {
   $("searchInput").value = $("searchMirror").value.trim();
@@ -2188,12 +2523,30 @@ paintRange($("voiceVolumeBar"));
 $("voiceVolumeBar").addEventListener("input", () => {
   voiceOutputVolume = Number($("voiceVolumeBar").value);
   $("voiceVolumeValue").textContent = `${voiceOutputVolume}%`;
+  if ($("privateCallVolumeBar")) $("privateCallVolumeBar").value = voiceOutputVolume;
+  if ($("privateCallVolumeValue")) $("privateCallVolumeValue").textContent = `${voiceOutputVolume}%`;
   paintRange($("voiceVolumeBar"));
+  if ($("privateCallVolumeBar")) paintRange($("privateCallVolumeBar"));
   localStorage.setItem("waveroom-voice-volume", String(voiceOutputVolume));
   for (const id of voicePeers.keys()) applyVoiceVolume(id);
   document.querySelectorAll("#remoteAudios audio").forEach(audio => {
     audio.volume = voiceOutputVolume / 100;
   });
+});
+
+$("privateCallVolumeBar").value = voiceOutputVolume;
+$("privateCallVolumeValue").textContent = `${voiceOutputVolume}%`;
+paintRange($("privateCallVolumeBar"));
+$("privateCallVolumeBar").addEventListener("input", () => {
+  voiceOutputVolume = Number($("privateCallVolumeBar").value);
+  $("privateCallVolumeValue").textContent = `${voiceOutputVolume}%`;
+  $("voiceVolumeBar").value = voiceOutputVolume;
+  $("voiceVolumeValue").textContent = `${voiceOutputVolume}%`;
+  paintRange($("privateCallVolumeBar"));
+  paintRange($("voiceVolumeBar"));
+  localStorage.setItem("waveroom-voice-volume", String(voiceOutputVolume));
+  const audio = document.getElementById("private-call-audio");
+  if (audio) audio.volume = voiceOutputVolume / 100;
 });
 
 $("progressBar").addEventListener("input", () => {
@@ -2222,8 +2575,254 @@ setInterval(() => {
 
 updateTrackUI(null);
 
+
+const THEME_DEFAULTS = {
+  accent: "#89ff18",
+  accent2: "#5bd90b",
+  purple: "#8b5cf6",
+  background: "#050811",
+  panel: "#0a0f1a",
+  sidebar: "#080c15",
+  text: "#f5f7fb",
+  border: "#202735",
+  activeMenu: "#173415"
+};
+
+const THEME_PRESETS = {
+  green: { ...THEME_DEFAULTS },
+  purple: { accent: "#b65cff", accent2: "#7b36ff", purple: "#ff63d8", background: "#080510", panel: "#120b1c", sidebar: "#0d0716", text: "#fff5ff", border: "#3b2250", activeMenu: "#342044" },
+  blue: { accent: "#37d8ff", accent2: "#2477ff", purple: "#7c5cff", background: "#040912", panel: "#081525", sidebar: "#06101d", text: "#f2fbff", border: "#173a54", activeMenu: "#0d3047" },
+  red: { accent: "#ff4d5f", accent2: "#d6253e", purple: "#ff8a3d", background: "#0b0508", panel: "#170a10", sidebar: "#12070b", text: "#fff5f6", border: "#4a1c26", activeMenu: "#3a141d" },
+  cyber: { accent: "#00f5ff", accent2: "#ff2bd6", purple: "#8d5cff", background: "#05040d", panel: "#0d0a1a", sidebar: "#090713", text: "#f6fbff", border: "#2d2550", activeMenu: "#25144a" },
+  sunset: { accent: "#ff7a18", accent2: "#ff3d81", purple: "#9b5cff", background: "#12080a", panel: "#211014", sidebar: "#160b0e", text: "#fff7f1", border: "#5a2830", activeMenu: "#4a1d24" },
+  ocean: { accent: "#2ee6c5", accent2: "#168cff", purple: "#6f7cff", background: "#031018", panel: "#071b26", sidebar: "#05151d", text: "#effcff", border: "#16465a", activeMenu: "#103d49" },
+  rose: { accent: "#ff5ac8", accent2: "#c73cff", purple: "#ff85df", background: "#100610", panel: "#1d0b1d", sidebar: "#160815", text: "#fff4fd", border: "#55204f", activeMenu: "#42163d" },
+  gold: { accent: "#ffc857", accent2: "#d99b22", purple: "#ffe19a", background: "#080704", panel: "#151208", sidebar: "#0e0c06", text: "#fff9e8", border: "#4b3c15", activeMenu: "#3b2f10" },
+  ice: { accent: "#9fe8ff", accent2: "#52a9ff", purple: "#b7a4ff", background: "#061018", panel: "#0b1b28", sidebar: "#08151f", text: "#f4fbff", border: "#27475d", activeMenu: "#18384d" },
+  forest: { accent: "#62e66f", accent2: "#239b50", purple: "#b1d96b", background: "#050b07", panel: "#0b1710", sidebar: "#07110b", text: "#f2fff3", border: "#21482d", activeMenu: "#173822" },
+  mono: { accent: "#f5f5f5", accent2: "#aeb4bf", purple: "#d6d9df", background: "#050608", panel: "#101216", sidebar: "#0b0d10", text: "#ffffff", border: "#30343b", activeMenu: "#25282e" }
+};
+
+function normalizeHexColor(value, fallback) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : fallback;
+}
+
+function getSavedTheme() {
+  try {
+    return { ...THEME_DEFAULTS, ...JSON.parse(localStorage.getItem("theso-theme") || "{}") };
+  } catch {
+    return { ...THEME_DEFAULTS };
+  }
+}
+
+function applyTheme(theme, persist = false) {
+  const safe = {
+    accent: normalizeHexColor(theme.accent, THEME_DEFAULTS.accent),
+    accent2: normalizeHexColor(theme.accent2, THEME_DEFAULTS.accent2),
+    purple: normalizeHexColor(theme.purple, THEME_DEFAULTS.purple),
+    background: normalizeHexColor(theme.background, THEME_DEFAULTS.background),
+    panel: normalizeHexColor(theme.panel, THEME_DEFAULTS.panel),
+    sidebar: normalizeHexColor(theme.sidebar, THEME_DEFAULTS.sidebar),
+    text: normalizeHexColor(theme.text, THEME_DEFAULTS.text),
+    border: normalizeHexColor(theme.border, THEME_DEFAULTS.border),
+    activeMenu: normalizeHexColor(theme.activeMenu, THEME_DEFAULTS.activeMenu)
+  };
+
+  const root = document.documentElement;
+  root.style.setProperty("--green", safe.accent);
+  root.style.setProperty("--green2", safe.accent2);
+  root.style.setProperty("--purple", safe.purple);
+  root.style.setProperty("--bg", safe.background);
+  root.style.setProperty("--panel", safe.panel);
+  root.style.setProperty("--theme-bg", safe.background);
+  root.style.setProperty("--theme-panel", safe.panel);
+  root.style.setProperty("--sidebar-bg", safe.sidebar);
+  root.style.setProperty("--text", safe.text);
+  root.style.setProperty("--line", safe.border);
+  root.style.setProperty("--active-menu-bg", safe.activeMenu);
+
+  if ($("themeAccent")) $("themeAccent").value = safe.accent;
+  if ($("themeAccent2")) $("themeAccent2").value = safe.accent2;
+  if ($("themePurple")) $("themePurple").value = safe.purple;
+  if ($("themeBackground")) $("themeBackground").value = safe.background;
+  if ($("themePanel")) $("themePanel").value = safe.panel;
+  if ($("themeSidebar")) $("themeSidebar").value = safe.sidebar;
+  if ($("themeText")) $("themeText").value = safe.text;
+  if ($("themeBorder")) $("themeBorder").value = safe.border;
+  if ($("themeActiveMenu")) $("themeActiveMenu").value = safe.activeMenu;
+
+  if (persist) localStorage.setItem("theso-theme", JSON.stringify(safe));
+}
+
+function readThemeControls() {
+  return {
+    accent: $("themeAccent")?.value,
+    accent2: $("themeAccent2")?.value,
+    purple: $("themePurple")?.value,
+    background: $("themeBackground")?.value,
+    panel: $("themePanel")?.value,
+    sidebar: $("themeSidebar")?.value,
+    text: $("themeText")?.value,
+    border: $("themeBorder")?.value,
+    activeMenu: $("themeActiveMenu")?.value
+  };
+}
+
+applyTheme(getSavedTheme());
+
+["themeAccent", "themeAccent2", "themePurple", "themeBackground", "themePanel", "themeSidebar", "themeText", "themeBorder", "themeActiveMenu"].forEach(id => {
+  $(id)?.addEventListener("input", () => applyTheme(readThemeControls(), true));
+});
+
+document.querySelectorAll("[data-theme-preset]").forEach(button => {
+  button.addEventListener("click", () => {
+    const preset = THEME_PRESETS[button.dataset.themePreset];
+    if (preset) applyTheme(preset, true);
+  });
+});
+
+$("resetTheme")?.addEventListener("click", () => {
+  applyTheme(THEME_DEFAULTS, true);
+  notify("Colores restablecidos.");
+});
+
+
 const savedName = localStorage.getItem("waveroom-name");
-if (savedName) username.value = savedName;
+if (savedName && savedName.trim().toLowerCase() !== "david") {
+  username.value = savedName;
+} else {
+  username.value = "USER";
+  localStorage.setItem("waveroom-name", "USER");
+}
 refreshProfileUI();
 setVoiceControls(false);
 $("voiceJoinBtn").disabled = true;
+
+// V43 · Sidebar colapsable y persistente.
+(() => {
+  const sidebar = document.querySelector(".sidebar");
+  const collapseButton = document.querySelector(".collapse");
+  if (!sidebar || !collapseButton) return;
+
+  const STORAGE_KEY = "waveroom-sidebar-collapsed";
+
+  function setTooltip(element, fallback) {
+    if (!element) return;
+    const label = fallback || element.querySelector("span")?.textContent?.trim() || element.textContent?.trim();
+    if (label) {
+      element.dataset.tooltip = label;
+      if (!element.getAttribute("aria-label")) element.setAttribute("aria-label", label);
+    }
+  }
+
+  document.querySelectorAll(".side-nav button").forEach(button => setTooltip(button));
+  setTooltip(document.getElementById("openProfile"), "Perfil");
+
+  function refreshDynamicTooltips() {
+    const roomTile = document.querySelector("#roomPanel:not(.hidden) .room-tile") || document.querySelector("#roomEntry:not(.hidden) .room-tile");
+    if (roomTile) {
+      const roomName = roomTile.querySelector("strong")?.textContent?.trim() || "Sala";
+      roomTile.dataset.tooltip = roomName;
+    }
+
+    document.querySelectorAll("#people .person").forEach(person => {
+      const name = person.querySelector("strong")?.textContent?.trim() || person.textContent?.trim() || "Usuario";
+      person.dataset.tooltip = name;
+    });
+  }
+
+  function applySidebarState(collapsed, persist = true) {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    collapseButton.classList.toggle("is-collapsed", collapsed);
+    collapseButton.title = collapsed ? "Abrir menú" : "Cerrar menú";
+    collapseButton.setAttribute("aria-label", collapseButton.title);
+    collapseButton.setAttribute("aria-expanded", String(!collapsed));
+    if (persist) localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+    refreshDynamicTooltips();
+  }
+
+  collapseButton.addEventListener("click", () => {
+    applySidebarState(!document.body.classList.contains("sidebar-collapsed"));
+  });
+
+  applySidebarState(localStorage.getItem(STORAGE_KEY) === "1", false);
+
+  const observer = new MutationObserver(refreshDynamicTooltips);
+  observer.observe(sidebar, { childList: true, subtree: true, characterData: true });
+})();
+
+
+/* V47 · Menú móvil y modo video/audio local */
+(() => {
+  const menuBtn = $("mobileMenuBtn");
+  const backdrop = $("sidebarBackdrop");
+  const sidebar = document.querySelector(".sidebar");
+  const mediaModeBtn = $("mediaModeBtn");
+  const videoStage = $("videoStage");
+
+  const closeMobileMenu = () => {
+    document.body.classList.remove("mobile-menu-open");
+    backdrop?.classList.add("hidden");
+    menuBtn?.setAttribute("aria-expanded", "false");
+  };
+  const openMobileMenu = () => {
+    document.body.classList.add("mobile-menu-open");
+    backdrop?.classList.remove("hidden");
+    menuBtn?.setAttribute("aria-expanded", "true");
+  };
+
+  menuBtn?.addEventListener("click", () => {
+    document.body.classList.contains("mobile-menu-open") ? closeMobileMenu() : openMobileMenu();
+  });
+  backdrop?.addEventListener("click", closeMobileMenu);
+  document.querySelectorAll(".side-nav button, #leaveRoom, #copyCode").forEach(el => {
+    el.addEventListener("click", () => { if (window.innerWidth <= 820) closeMobileMenu(); });
+  });
+  window.addEventListener("resize", () => { if (window.innerWidth > 820) closeMobileMenu(); });
+
+  let audioOnly = localStorage.getItem("theso-media-mode") === "audio";
+  const applyMediaMode = () => {
+    document.body.classList.toggle("audio-only-mode", audioOnly);
+    if (mediaModeBtn) {
+      mediaModeBtn.textContent = audioOnly ? "🎬 Ver video" : "🎧 Solo audio";
+      mediaModeBtn.setAttribute("aria-pressed", String(audioOnly));
+    }
+    if (videoStage) videoStage.setAttribute("data-mode", audioOnly ? "audio" : "video");
+  };
+  mediaModeBtn?.addEventListener("click", () => {
+    audioOnly = !audioOnly;
+    localStorage.setItem("theso-media-mode", audioOnly ? "audio" : "video");
+    applyMediaMode();
+    notify(audioOnly ? "Modo solo audio activado." : "Video visible nuevamente.");
+  });
+  applyMediaMode();
+})();
+
+
+function setSearchProvider(provider) {
+  searchProvider = provider;
+  const twitch = provider === "twitch";
+  $("youtubeTab")?.classList.toggle("active", !twitch);
+  $("twitchTab")?.classList.toggle("active", twitch);
+
+  const providerIcon = $("providerIcon");
+  if (providerIcon) {
+    providerIcon.className = `provider-icon ${twitch ? "twitch-provider" : "youtube-provider"}`;
+    providerIcon.innerHTML = twitch
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2h17v12l-5 5h-4l-3 3v-3H4V2zm2 2v13h5v2l2-2h3l3-3V4H6zm4 3h2v6h-2V7zm5 0h2v6h-2V7z"/></svg>'
+      : "▶";
+  }
+
+  $("providerTitle").textContent = twitch ? "Buscar directos en Twitch" : "Buscar música en YouTube";
+  $("providerSubtitle").textContent = twitch ? "Encuentra canales en vivo y reprodúcelos sin mezclar enlaces de YouTube." : "Busca canciones o agrega enlaces exclusivos de YouTube.";
+  $("searchMirror").placeholder = twitch ? "Buscar canal en directo o pegar enlace de Twitch..." : "Buscar canción o pegar enlace de YouTube...";
+  $("searchInput").placeholder = twitch ? "Buscar canal en Twitch o pegar enlace de Twitch..." : "Buscar canción, canal o pegar enlace de YouTube...";
+  $("searchStatus").textContent = twitch ? "Busca un canal que esté en directo." : "Busca una canción para comenzar.";
+  $("manualLinkSummary").textContent = twitch ? "Agregar con enlace de Twitch" : "Agregar con enlace de YouTube";
+  $("youtubeUrl").placeholder = twitch ? "Pega un enlace de Twitch" : "Pega un enlace de YouTube";
+  $("manualLinkHint").textContent = twitch ? "Solo se aceptan enlaces de Twitch en esta pestaña." : "Solo se aceptan enlaces de YouTube en esta pestaña.";
+  $("searchResults").innerHTML = "";
+  $("youtubeUrl").value = "";
+}
+$("youtubeTab")?.addEventListener("click",()=>setSearchProvider("youtube"));
+$("twitchTab")?.addEventListener("click",()=>setSearchProvider("twitch"));

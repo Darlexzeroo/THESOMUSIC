@@ -105,10 +105,52 @@ app.get("/api/youtube/info", async (req, res) => {
   }
 });
 
+
+let twitchTokenCache = { token: "", expiresAt: 0 };
+async function getTwitchToken() {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Faltan TWITCH_CLIENT_ID y TWITCH_CLIENT_SECRET.");
+  if (twitchTokenCache.token && Date.now() < twitchTokenCache.expiresAt) return twitchTokenCache.token;
+  const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: "client_credentials" });
+  const response = await fetch(`https://id.twitch.tv/oauth2/token?${params}`, { method: "POST" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "No se pudo autenticar con Twitch.");
+  twitchTokenCache = { token: data.access_token, expiresAt: Date.now() + Math.max(60, data.expires_in - 120) * 1000 };
+  return data.access_token;
+}
+
+app.get("/api/twitch/search", async (req, res) => {
+  const query = String(req.query.q || "").trim().slice(0, 100);
+  if (!query) return res.status(400).json({ error: "Escribe el nombre de un canal." });
+  try {
+    const token = await getTwitchToken();
+    const headers = { "Client-ID": process.env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` };
+    const channelsResponse = await fetch(`https://api.twitch.tv/helix/search/channels?query=${encodeURIComponent(query)}&first=12&live_only=true`, { headers });
+    const channels = await channelsResponse.json();
+    if (!channelsResponse.ok) return res.status(channelsResponse.status).json({ error: channels.message || "Twitch no pudo completar la búsqueda." });
+    const names = (channels.data || []).map(item => item.broadcaster_login).filter(Boolean);
+    let streamMap = new Map();
+    if (names.length) {
+      const params = new URLSearchParams(); names.forEach(name => params.append("user_login", name));
+      const streamsResponse = await fetch(`https://api.twitch.tv/helix/streams?${params}`, { headers });
+      const streams = await streamsResponse.json();
+      streamMap = new Map((streams.data || []).map(item => [item.user_login.toLowerCase(), item]));
+    }
+    const results = (channels.data || []).filter(item => item.is_live).map(item => {
+      const stream = streamMap.get(String(item.broadcaster_login).toLowerCase()) || {};
+      return { provider: "twitch", id: item.broadcaster_login, title: stream.title || item.title || `${item.display_name} en directo`, channel: item.display_name, category: stream.game_name || item.game_name || "Twitch", viewers: stream.viewer_count || 0, thumbnail: (stream.thumbnail_url || item.thumbnail_url || "").replace("{width}", "640").replace("{height}", "360"), live: true };
+    });
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "No se pudo conectar con Twitch." });
+  }
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
-const connectedClients = new Map(); // clientId -> { socketId, name, avatar }
+const connectedClients = new Map(); // clientId -> { socketId, name, avatar, banner }
 const socketClients = new Map(); // socketId -> clientId
 const PRIVATE_MESSAGES_FILE = path.join(__dirname, "private-messages.json");
 let persistentPrivateChats = {};
@@ -135,15 +177,17 @@ function getContactMeta(clientId) {
     socketId: live?.socketId || null,
     name: live?.name || saved.name || "Usuario",
     avatar: live?.avatar || saved.avatar || "",
+    banner: live?.banner || saved.banner || "",
     online: Boolean(live)
   };
 }
-function rememberContact(clientId, name, avatar) {
+function rememberContact(clientId, name, avatar, banner = "") {
   if (!clientId) return;
   persistentPrivateChats.__contacts ||= {};
   persistentPrivateChats.__contacts[clientId] = {
     name: String(name || "Usuario").slice(0, 30),
-    avatar: String(avatar || "").slice(0, 500000)
+    avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
+    banner: String(banner || "").slice(0, 3 * 1024 * 1024)
   };
   savePersistentPrivateChats();
 }
@@ -182,6 +226,7 @@ function publicRoom(code, room) {
       id,
       name: user.name,
       avatar: user.avatar || "",
+      banner: user.banner || "",
       clientId: user.clientId || ""
     })),
     video: room.video,
@@ -224,7 +269,7 @@ function removeFromRooms(socket) {
 }
 
 io.on("connection", socket => {
-  socket.on("register-client", ({ clientId, name, avatar } = {}, callback) => {
+  socket.on("register-client", ({ clientId, name, avatar, banner } = {}, callback) => {
     clientId = safeClientId(clientId);
     if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
 
@@ -236,11 +281,16 @@ io.on("connection", socket => {
       if (previousProfile?.socketId === socket.id) connectedClients.delete(previousClientId);
     }
 
-    const profile = { socketId: socket.id, name: String(name || "Usuario").trim().slice(0, 30), avatar: String(avatar || "").slice(0, 500000) };
+    const profile = {
+      socketId: socket.id,
+      name: String(name || "Usuario").trim().slice(0, 30),
+      avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
+      banner: String(banner || "").slice(0, 3 * 1024 * 1024)
+    };
     connectedClients.set(clientId, profile);
     socketClients.set(socket.id, clientId);
     socket.join(`client:${clientId}`);
-    rememberContact(clientId, profile.name, profile.avatar);
+    rememberContact(clientId, profile.name, profile.avatar, profile.banner);
     callback?.({ ok: true, clientId });
   });
 
@@ -273,8 +323,8 @@ io.on("connection", socket => {
     const senderLive = connectedClients.get(clientId);
     const senderMeta = getContactMeta(clientId);
     const targetMeta = getContactMeta(targetClientId);
-    rememberContact(clientId, senderMeta.name, senderMeta.avatar);
-    rememberContact(targetClientId, targetMeta.name, targetMeta.avatar);
+    rememberContact(clientId, senderMeta.name, senderMeta.avatar, senderMeta.banner);
+    rememberContact(targetClientId, targetMeta.name, targetMeta.avatar, targetMeta.banner);
     const message = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       from: socket.id,
@@ -303,14 +353,19 @@ io.on("connection", socket => {
     socket.emit("private-chat-global", message);
     callback?.({ ok: true, message });
   });
-  socket.on("create-room", ({ name, avatar, clientId }, callback) => {
+  socket.on("create-room", ({ name, avatar, banner, clientId }, callback) => {
     removeFromRooms(socket);
     const code = roomCode();
     const username = String(name || "Invitado").trim().slice(0, 30);
 
     const room = {
       hostId: socket.id,
-      users: new Map([[socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000), clientId: safeClientId(clientId) || socket.id }]]),
+      users: new Map([[socket.id, {
+        name: username,
+        avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
+        banner: String(banner || "").slice(0, 3 * 1024 * 1024),
+        clientId: safeClientId(clientId) || socket.id
+      }]]),
       video: null,
       playing: false,
       time: 0,
@@ -327,7 +382,7 @@ io.on("connection", socket => {
     callback?.({ ok: true, socketId: socket.id, room: publicRoom(code, room) });
   });
 
-  socket.on("join-room", ({ code, name, avatar, clientId }, callback) => {
+  socket.on("join-room", ({ code, name, avatar, banner, clientId }, callback) => {
     removeFromRooms(socket);
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
@@ -335,7 +390,12 @@ io.on("connection", socket => {
     if (!room) return callback?.({ ok: false, error: "La sala no existe." });
 
     const username = String(name || "Invitado").trim().slice(0, 30);
-    room.users.set(socket.id, { name: username, avatar: String(avatar || "").slice(0, 500000), clientId: safeClientId(clientId) || socket.id });
+    room.users.set(socket.id, {
+      name: username,
+      avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
+      banner: String(banner || "").slice(0, 3 * 1024 * 1024),
+      clientId: safeClientId(clientId) || socket.id
+    });
     socket.join(code);
 
     socket.to(code).emit("system-message", `${username} entró a la sala.`);
@@ -343,7 +403,7 @@ io.on("connection", socket => {
     emitRoom(code);
   });
 
-  socket.on("update-profile", ({ code, name, avatar, clientId }, callback) => {
+  socket.on("update-profile", ({ code, name, avatar, banner, clientId }, callback) => {
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id)) {
@@ -353,7 +413,8 @@ io.on("connection", socket => {
     const username = String(name || "Invitado").trim().slice(0, 30);
     room.users.set(socket.id, {
       name: username,
-      avatar: String(avatar || "").slice(0, 500000),
+      avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
+      banner: String(banner || "").slice(0, 3 * 1024 * 1024),
       clientId: safeClientId(clientId) || room.users.get(socket.id)?.clientId || socket.id
     });
     emitRoom(code);
