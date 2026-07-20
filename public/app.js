@@ -767,13 +767,29 @@ function showTwitchChannel(channel, autoplay = true) {
   const frame = $("twitchPlayer");
   const yt = $("youtubePlayer");
   if (!frame || !channel) return;
+
   yt.classList.add("hidden");
   frame.classList.remove("hidden");
-  const parent = encodeURIComponent(location.hostname || "localhost");
-  // Twitch permite autoplay de forma más fiable si inicia silenciado.
-  // El usuario puede activar el audio dentro del reproductor sin detener el directo.
-  const muted = autoplay ? "true" : "false";
-  frame.src = `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${parent}&autoplay=${autoplay ? "true" : "false"}&muted=${muted}`;
+
+  // Twitch exige que parent sea únicamente el dominio, sin https:// ni rutas.
+  // En Render será thesomusic.onrender.com y en local será localhost.
+  const parentHost = window.location.hostname || "thesomusic.onrender.com";
+  const playerUrl = new URL("https://player.twitch.tv/");
+  playerUrl.searchParams.set("channel", String(channel).trim().toLowerCase());
+  playerUrl.searchParams.set("parent", parentHost);
+  playerUrl.searchParams.set("autoplay", autoplay ? "true" : "false");
+  // Los navegadores permiten el autoplay de Twitch con más fiabilidad si inicia silenciado.
+  playerUrl.searchParams.set("muted", "true");
+
+  frame.setAttribute("allow", "autoplay; fullscreen; picture-in-picture");
+  frame.src = playerUrl.toString();
+
+  console.info("Twitch embed", {
+    channel: String(channel).trim().toLowerCase(),
+    parent: parentHost,
+    autoplay
+  });
+
   twitchPausedChannel = autoplay ? "" : channel;
   if (autoplay) {
     document.body.classList.add("is-playing");
