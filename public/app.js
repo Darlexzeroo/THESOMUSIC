@@ -722,6 +722,40 @@ async function prepareProfileImage(file, type = "avatar") {
   });
 }
 
+function renderRoomDirectory(rooms = []) {
+  const container = $("publicRoomsList");
+  if (!container) return;
+  if (!rooms.length) {
+    container.innerHTML = '<div class="room-directory-empty">Todavía no hay salas creadas.</div>';
+    return;
+  }
+  container.innerHTML = rooms.map((room, index) => {
+    const isPrivate = room.visibility === "private";
+    const people = (room.users || []).map(user => `<span class="directory-user" title="${escapeHtml(user.name)}">${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="">` : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>`).join("");
+    return `<article class="directory-room ${isPrivate ? "private" : "public"}">
+      <div class="directory-room-main"><span class="directory-room-icon">${isPrivate ? "🔒" : "🌐"}</span><div><strong>${escapeHtml(room.roomName || "Sala")}</strong><small>${isPrivate ? "Sala privada · requiere código" : `Sala pública · código ${escapeHtml(room.code || "")}`}</small></div></div>
+      <div class="directory-room-users"><div class="directory-avatars">${people}</div><span>${Number(room.userCount || 0)} conectado${Number(room.userCount || 0) === 1 ? "" : "s"}</span></div>
+      <button type="button" data-directory-join="${index}" ${isPrivate ? 'class="private-room-btn"' : ''}>${isPrivate ? "Usar código" : "Unirme"}</button>
+    </article>`;
+  }).join("");
+  container.querySelectorAll("[data-directory-join]").forEach(button => button.addEventListener("click", () => {
+    const room = rooms[Number(button.dataset.directoryJoin)];
+    if (!room) return;
+    if (room.visibility === "private") {
+      $("roomCodeInput")?.focus();
+      notify("Esta sala es privada. Escribe su código para entrar.");
+      return;
+    }
+    joinRoomByCode(room.code);
+  }));
+}
+
+function requestRoomDirectory() {
+  socket.emit("list-rooms", {}, response => {
+    if (response?.ok) renderRoomDirectory(response.rooms || []);
+  });
+}
+
 function isHost() {
   return currentRoom && currentRoom.hostId === mySocketId;
 }
@@ -1020,9 +1054,9 @@ function renderRoom(room) {
   currentRoom = room;
   $("roomEntry").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
-  $("roomCode").textContent = room.code;
+  $("roomCode").textContent = `${room.roomName || "Mi sala"} · ${room.code} · ${room.visibility === "private" ? "Privada" : "Pública"}`;
   $("peopleCount").textContent = room.users.length;
-  $("roomRole").textContent = isHost() ? "Anfitrión" : "Invitado";
+  $("roomRole").textContent = isHost() ? "Anfitrión" : "Oyente";
   $("roleBadge").textContent = isHost() ? "Controlas la sala" : "Escuchando en sala";
 
   $("people").innerHTML = room.users.map(user => `
@@ -1763,6 +1797,7 @@ async function searchYouTube(query) {
               class="play-result-btn"
               type="button"
               data-play-now-index="${index}"
+              ${currentRoom && !isHost() ? "disabled title=\"Solo el anfitrión puede reproducir ahora\"" : ""}
             >
               Reproducir ahora
             </button>
@@ -1826,7 +1861,7 @@ async function searchTwitch(query) {
       return;
     }
     status.textContent = `${results.length} directos encontrados.`;
-    resultsContainer.innerHTML = results.map((item,index)=>`<article class="search-result live-result"><img src="${escapeHtml(item.thumbnail)}" alt=""><div class="search-result-info"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.channel)} · ${escapeHtml(item.category || "Twitch")} · ${Number(item.viewers||0).toLocaleString()} espectadores</span><b class="live-badge">EN VIVO</b><div class="search-result-actions"><button class="queue-result-btn" type="button" data-twitch-queue="${index}">+ Agregar a cola</button><button class="play-result-btn" type="button" data-twitch-play="${index}">Reproducir ahora</button></div></div></article>`).join("");
+    resultsContainer.innerHTML = results.map((item,index)=>`<article class="search-result live-result"><img src="${escapeHtml(item.thumbnail)}" alt=""><div class="search-result-info"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.channel)} · ${escapeHtml(item.category || "Twitch")} · ${Number(item.viewers||0).toLocaleString()} espectadores</span><b class="live-badge">EN VIVO</b><div class="search-result-actions"><button class="queue-result-btn" type="button" data-twitch-queue="${index}">+ Agregar a cola</button><button class="play-result-btn" type="button" data-twitch-play="${index}" ${currentRoom && !isHost() ? 'disabled title="Solo el anfitrión puede reproducir ahora"' : ''}>Reproducir ahora</button></div></div></article>`).join("");
     const toVideo=i=>({ ...results[Number(i)], provider:"twitch", live:true });
     resultsContainer.querySelectorAll("[data-twitch-queue]").forEach(btn=>btn.addEventListener("click",()=>addVideoToQueue(toVideo(btn.dataset.twitchQueue))));
     resultsContainer.querySelectorAll("[data-twitch-play]").forEach(btn=>btn.addEventListener("click",()=>startSelectedVideo(toVideo(btn.dataset.twitchPlay))));
@@ -2047,47 +2082,39 @@ function nextVideo() {
 $("nextBtn").addEventListener("click", nextVideo);
 
 $("createRoom").addEventListener("click", () => {
-  socket.emit("create-room", getProfile(), response => {
+  socket.emit("create-room", {
+    ...getProfile(),
+    visibility: $("roomVisibility")?.value || "public",
+    roomName: $("roomNameInput")?.value.trim() || ""
+  }, response => {
     if (!response?.ok) return notify(response?.error);
     mySocketId = response.socketId;
     renderRoom(response.room);
-    notify(`Sala ${response.room.code} creada.`);
+    if ($("roomNameInput")) $("roomNameInput").value = "";
+    notify(`${response.room.visibility === "private" ? "Sala privada" : "Sala pública"} ${response.room.code} creada.`);
   });
 });
 
-$("joinRoom").addEventListener("click", () => {
-  const code = $("roomCodeInput").value.trim().toUpperCase();
+async function joinRoomByCode(rawCode) {
+  const code = String(rawCode || "").trim().toUpperCase();
   if (!code) return notify("Escribe el código.");
-
   socket.emit("join-room", { code, ...getProfile() }, async response => {
     if (!response?.ok) return notify(response?.error);
-
     mySocketId = response.socketId;
     renderRoom(response.room);
-
-    // Always load the active room video after entering, even if the player
-    // is still initializing. This removes the old default-video problem.
+    if ($("roomCodeInput")) $("roomCodeInput").value = "";
     if (response.room.video) {
-      pendingRoomPlayback = {
-        video: response.room.video,
-        time: response.room.time || 0,
-        playing: response.room.playing
-      };
-
-      try {
-        await applyRoomPlayback(
-          response.room.video,
-          response.room.time || 0,
-          response.room.playing
-        );
-      } catch {
-        notify("El reproductor todavía está cargando.");
-      }
+      pendingRoomPlayback = { video: response.room.video, time: response.room.time || 0, playing: response.room.playing };
+      try { await applyRoomPlayback(response.room.video, response.room.time || 0, response.room.playing); }
+      catch { notify("El reproductor todavía está cargando."); }
     }
-
-    notify(`Entraste a ${response.room.code}.`);
+    notify(`Entraste a ${response.room.roomName || response.room.code}.`);
   });
-});
+}
+
+$("joinRoom").addEventListener("click", () => joinRoomByCode($("roomCodeInput").value));
+$("roomCodeInput")?.addEventListener("keydown", event => { if (event.key === "Enter") joinRoomByCode(event.currentTarget.value); });
+$("refreshRooms")?.addEventListener("click", requestRoomDirectory);
 
 $("leaveRoom").addEventListener("click", () => {
   if (!currentRoom) return;
@@ -2297,6 +2324,7 @@ document.addEventListener("keydown", event => {
 socket.on("connect", () => {
   mySocketId = socket.id;
   $("connectedText").textContent = "Conectado";
+  requestRoomDirectory();
 
   // Primero se une el socket al canal client:<id>. Solo después se cargan
   // conversaciones e historial, evitando la carrera que impedía recibir mensajes
@@ -2316,6 +2344,8 @@ socket.on("disconnect", () => {
   leaveVoiceChat(false);
   endPrivateCall(false);
 });
+
+socket.on("rooms-list", rooms => renderRoomDirectory(rooms || []));
 
 socket.on("room-state", room => {
   if (currentRoom?.code === room.code) renderRoom(room);

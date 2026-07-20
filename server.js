@@ -222,6 +222,8 @@ function publicRoom(code, room) {
   return {
     code,
     hostId: room.hostId,
+    visibility: room.visibility || "public",
+    roomName: room.roomName || `Sala de ${room.users.get(room.hostId)?.name || "Usuario"}`,
     users: [...room.users.entries()].map(([id, user]) => ({
       id,
       name: user.name,
@@ -239,9 +241,28 @@ function publicRoom(code, room) {
   };
 }
 
+function roomDirectory() {
+  return [...rooms.entries()].map(([code, room]) => ({
+    code: room.visibility === "private" ? null : code,
+    visibility: room.visibility || "public",
+    roomName: room.roomName || `Sala de ${room.users.get(room.hostId)?.name || "Usuario"}`,
+    hostName: room.users.get(room.hostId)?.name || "Usuario",
+    userCount: room.users.size,
+    users: [...room.users.values()].map(user => ({
+      name: user.name,
+      avatar: user.avatar || ""
+    }))
+  })).sort((a, b) => Number(b.visibility === "public") - Number(a.visibility === "public") || b.userCount - a.userCount);
+}
+
+function broadcastRoomDirectory() {
+  io.emit("rooms-list", roomDirectory());
+}
+
 function emitRoom(code) {
   const room = rooms.get(code);
   if (room) io.to(code).emit("room-state", publicRoom(code, room));
+  broadcastRoomDirectory();
 }
 
 function removeFromRooms(socket) {
@@ -255,6 +276,7 @@ function removeFromRooms(socket) {
 
     if (room.users.size === 0) {
       rooms.delete(code);
+      broadcastRoomDirectory();
       continue;
     }
 
@@ -269,6 +291,8 @@ function removeFromRooms(socket) {
 }
 
 io.on("connection", socket => {
+  socket.emit("rooms-list", roomDirectory());
+  socket.on("list-rooms", (_payload, callback) => callback?.({ ok: true, rooms: roomDirectory() }));
   socket.on("register-client", ({ clientId, name, avatar, banner } = {}, callback) => {
     clientId = safeClientId(clientId);
     if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
@@ -353,13 +377,18 @@ io.on("connection", socket => {
     socket.emit("private-chat-global", message);
     callback?.({ ok: true, message });
   });
-  socket.on("create-room", ({ name, avatar, banner, clientId }, callback) => {
+  socket.on("create-room", ({ name, avatar, banner, clientId, visibility, roomName }, callback) => {
     removeFromRooms(socket);
     const code = roomCode();
     const username = String(name || "Invitado").trim().slice(0, 30);
 
+    visibility = visibility === "private" ? "private" : "public";
+    roomName = String(roomName || `Sala de ${username}`).trim().slice(0, 40);
+
     const room = {
       hostId: socket.id,
+      visibility,
+      roomName,
       users: new Map([[socket.id, {
         name: username,
         avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
@@ -380,6 +409,7 @@ io.on("connection", socket => {
     rooms.set(code, room);
     socket.join(code);
     callback?.({ ok: true, socketId: socket.id, room: publicRoom(code, room) });
+    broadcastRoomDirectory();
   });
 
   socket.on("join-room", ({ code, name, avatar, banner, clientId }, callback) => {
@@ -532,6 +562,7 @@ io.on("connection", socket => {
     const room = rooms.get(code);
 
     if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (!room.users.has(socket.id)) return callback?.({ ok: false, error: "Primero entra a la sala." });
 
     const provider = video.provider === "twitch" ? "twitch" : "youtube";
     const item = {

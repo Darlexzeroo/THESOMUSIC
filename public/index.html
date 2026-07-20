@@ -54,7 +54,8 @@
         <h3>TUS SALAS</h3>
         <div id="roomEntry" class="room-entry">
           <div class="room-tile"><span>▣</span><div><strong>Sin sala</strong><small>Crea o únete</small></div></div>
-          <button id="createRoom" class="gradient-btn" type="button">＋ Crear sala</button>
+          <input id="roomNameInput" class="room-name-input" maxlength="40" placeholder="Nombre de la sala (opcional)">
+          <div class="room-create-row"><select id="roomVisibility" aria-label="Privacidad de la sala"><option value="public">🌐 Pública</option><option value="private">🔒 Privada</option></select><button id="createRoom" class="gradient-btn" type="button">＋ Crear sala</button></div>
           <div class="join-mini"><input id="roomCodeInput" maxlength="6" placeholder="CÓDIGO"><button id="joinRoom" type="button">Entrar</button></div>
         </div>
 
@@ -116,6 +117,8 @@
             <details class="manual-link"><summary>Reproducir con enlace de Twitch</summary><form id="twitchVideoForm"><input id="twitchUrl" placeholder="Pega un enlace de Twitch"><button type="submit">Reproducir directo</button></form><p class="manual-link-hint">Solo se aceptan enlaces de Twitch.</p></details>
           </section>
         </section>
+
+        <section class="room-directory-card"><div class="room-directory-head"><div><span>SALAS ACTIVAS</span><h2>Únete y escucha con otros</h2></div><button id="refreshRooms" type="button">Actualizar</button></div><div id="publicRoomsList" class="public-rooms-list"><div class="room-directory-empty">Todavía no hay salas creadas.</div></div></section>
 
         <div class="popular"><h3>Búsquedas populares</h3><div><button data-query="Bad Bunny">Bad Bunny</button><button data-query="Mora">Mora</button><button data-query="Peso Pluma">Peso Pluma</button><button data-query="The Weeknd">The Weeknd</button><button data-query="Feid">Feid</button><button data-query="Karol G">Karol G</button></div></div>
       </section>
