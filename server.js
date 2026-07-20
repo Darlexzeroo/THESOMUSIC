@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -204,13 +205,24 @@ function sanitizeChatImage(value) {
 
 function roomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code;
+
+  // Cada creación genera un código nuevo con aleatoriedad criptográfica.
+  // También se comprueba contra todas las salas activas antes de devolverlo.
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    let code = "";
+    for (let i = 0; i < 6; i += 1) {
+      code += chars[crypto.randomInt(0, chars.length)];
+    }
+
+    if (!rooms.has(code)) return code;
+  }
+
+  // Respaldo extremadamente improbable: aumenta la longitud del código.
+  let fallback;
   do {
-    code = Array.from({ length: 6 }, () =>
-      chars[Math.floor(Math.random() * chars.length)]
-    ).join("");
-  } while (rooms.has(code));
-  return code;
+    fallback = crypto.randomBytes(8).toString("hex").slice(0, 8).toUpperCase();
+  } while (rooms.has(fallback));
+  return fallback;
 }
 
 function currentRoomTime(room) {

@@ -1054,6 +1054,8 @@ function renderRoom(room) {
   currentRoom = room;
   $("roomEntry").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
+  // Mientras el usuario está dentro de una sala, no se muestran las demás salas.
+  $("roomDirectoryCard")?.classList.add("hidden");
   $("roomCode").textContent = `${room.roomName || "Mi sala"} · ${room.code} · ${room.visibility === "private" ? "Privada" : "Pública"}`;
   $("peopleCount").textContent = room.users.length;
   $("roomRole").textContent = isHost() ? "Anfitrión" : "Oyente";
@@ -1117,6 +1119,9 @@ function resetRoomUI() {
   currentRoom = null;
   $("roomEntry").classList.remove("hidden");
   $("roomPanel").classList.add("hidden");
+  // Al salir de la sala, vuelve a mostrarse el directorio para poder elegir otra.
+  $("roomDirectoryCard")?.classList.remove("hidden");
+  requestRoomDirectory();
   $("roleBadge").textContent = "Modo individual";
   $("people").innerHTML = "";
   $("queueCount").textContent = "0";
