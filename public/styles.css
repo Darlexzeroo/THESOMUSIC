@@ -3338,3 +3338,14 @@ body.auth-gated { overflow: hidden; }
   .progress-row{gap:6px}
   .progress-row span{font-size:10px}
 }
+
+
+/* V78: chat visible solo dentro de una sala y selector de emotes contenido */
+.emoji-picker{overflow:hidden!important;max-width:calc(100vw - 24px)!important}
+.emoji-picker-scroll{display:grid;grid-template-columns:repeat(6,minmax(32px,1fr));gap:5px;max-height:210px;overflow-y:auto;overflow-x:hidden;padding-right:2px;overscroll-behavior:contain}
+.emoji-picker-help{display:block;grid-column:1/-1;margin-top:7px;color:var(--muted);font-size:10px;text-align:center}
+.emoji-picker .custom-emote-btn{display:grid;place-items:center;overflow:hidden}
+.emoji-picker .custom-emote-btn img{width:28px;height:28px;object-fit:contain;display:block}
+.emoji-picker .add-custom-emote{border:1px dashed #42516b!important;background:#111a29!important;color:#13e2ef;font-size:25px!important;font-weight:800}
+.rail-room-chat.hidden{display:none!important}
+@media(max-width:700px){.emoji-picker-scroll{grid-template-columns:repeat(5,minmax(32px,1fr));max-height:190px}.rail-emoji-picker{left:8px!important;right:8px!important;width:auto!important;max-width:none!important}}

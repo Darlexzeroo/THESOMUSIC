@@ -325,25 +325,106 @@ function formatTime(seconds) {
 
 
 const EMOTES = ["😀","😂","😍","😎","😭","😡","🥳","🤔","👍","👎","❤️","🔥","🎉","💀","👀","🙏","🎵","🎧","🎤","✨","🚀","🫡","😴","🤡"];
+const CUSTOM_EMOTES_KEY = "theso_custom_emotes_v1";
 
-function setupEmojiPicker(buttonId, pickerId, inputId) {
+function getCustomEmotes() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_EMOTES_KEY) || "[]").filter(item => item?.data).slice(0, 24); }
+  catch { return []; }
+}
+
+function saveCustomEmotes(items) {
+  try { localStorage.setItem(CUSTOM_EMOTES_KEY, JSON.stringify(items.slice(0, 24))); }
+  catch { notify("No hay espacio para guardar más emotes personalizados."); }
+}
+
+async function prepareCustomEmote(file) {
+  const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+  if (!file || !allowed.includes(file.type)) throw new Error("Usa PNG, JPG, WEBP o GIF.");
+  if (file.size > 2 * 1024 * 1024) throw new Error("El emote no puede superar 2 MB.");
+  if (file.type === "image/gif") return { data: await readFileDataUrl(file), name: file.name };
+  const source = await readFileDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = source;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const scale = Math.max(128 / image.naturalWidth, 128 / image.naturalHeight);
+  const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+  ctx.drawImage(image, (128 - width) / 2, (128 - height) / 2, width, height);
+  return { data: canvas.toDataURL("image/webp", .82), name: file.name.replace(/\.[^.]+$/, ".webp") };
+}
+
+function sendCustomEmote(emote, mode) {
+  if (mode === "private") {
+    if (!activePrivateClientId) return notify("Selecciona una conversación privada.");
+    socket.emit("private-chat-global", { clientId: persistentClientId, targetClientId: activePrivateClientId, text: "", image: emote }, response => {
+      if (!response?.ok) notify(response?.error || "No se pudo enviar el emote.");
+    });
+    return;
+  }
+  if (!currentRoom) return notify("Primero entra a una sala.");
+  socket.emit("chat", { code: currentRoom.code, text: "", image: emote }, response => {
+    if (!response?.ok) notify(response?.error || "No se pudo enviar el emote.");
+  });
+}
+
+function setupEmojiPicker(buttonId, pickerId, inputId, mode = "room") {
   const button = $(buttonId);
   const picker = $(pickerId);
   const input = $(inputId);
-  picker.innerHTML = EMOTES.map(e => `<button type="button" data-emote="${e}">${e}</button>`).join("");
+  if (!button || !picker || !input) return;
+
+  const renderPicker = () => {
+    const customs = getCustomEmotes();
+    picker.innerHTML = `
+      <div class="emoji-picker-scroll">
+        ${EMOTES.map(e => `<button type="button" data-emote="${e}">${e}</button>`).join("")}
+        ${customs.map((e, index) => `<button type="button" class="custom-emote-btn" data-custom-emote="${index}" title="${escapeHtml(e.name || "Emote personalizado")}"><img src="${escapeHtml(e.data)}" alt=""></button>`).join("")}
+        <button type="button" class="add-custom-emote" data-add-custom-emote title="Agregar emote personalizado">＋</button>
+      </div>
+      <input class="custom-emote-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <small class="emoji-picker-help">Tus emotes se guardan en este navegador.</small>`;
+  };
+  renderPicker();
+
   button.addEventListener("click", event => {
     event.stopPropagation();
+    renderPicker();
     picker.classList.toggle("hidden");
   });
   picker.addEventListener("click", event => {
     const emote = event.target.closest("[data-emote]")?.dataset.emote;
-    if (!emote) return;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    input.value = input.value.slice(0, start) + emote + input.value.slice(end);
-    picker.classList.add("hidden");
-    input.focus();
-    input.setSelectionRange(start + emote.length, start + emote.length);
+    if (emote) {
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      input.value = input.value.slice(0, start) + emote + input.value.slice(end);
+      picker.classList.add("hidden");
+      input.focus();
+      input.setSelectionRange(start + emote.length, start + emote.length);
+      return;
+    }
+    const customButton = event.target.closest("[data-custom-emote]");
+    if (customButton) {
+      const custom = getCustomEmotes()[Number(customButton.dataset.customEmote)];
+      if (custom) sendCustomEmote(custom, mode);
+      picker.classList.add("hidden");
+      return;
+    }
+    if (event.target.closest("[data-add-custom-emote]")) picker.querySelector(".custom-emote-input")?.click();
+  });
+  picker.addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const emote = await prepareCustomEmote(file);
+      const items = getCustomEmotes();
+      items.push(emote);
+      saveCustomEmotes(items);
+      renderPicker();
+      notify("Emote personalizado agregado.");
+    } catch (error) { notify(error.message || "No se pudo agregar el emote."); }
   });
   document.addEventListener("click", event => {
     if (!picker.contains(event.target) && event.target !== button) picker.classList.add("hidden");
@@ -1101,6 +1182,7 @@ function renderRoom(room) {
   currentRoom = room;
   $("roomEntry").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
+  $("railRoomChat")?.classList.remove("hidden");
   // Mientras el usuario está dentro de una sala, no se muestran las demás salas.
   $("roomDirectoryCard")?.classList.add("hidden");
   $("roomCode").textContent = `${room.roomName || "Mi sala"} · ${room.code} · ${room.visibility === "private" ? "Privada" : "Pública"}`;
@@ -1202,6 +1284,8 @@ function resetRoomUI() {
   currentRoom = null;
   $("roomEntry").classList.remove("hidden");
   $("roomPanel").classList.add("hidden");
+  $("railRoomChat")?.classList.add("hidden");
+  $("railEmojiPicker")?.classList.add("hidden");
   // Al salir de la sala, vuelve a mostrarse el directorio para poder elegir otra.
   $("roomDirectoryCard")?.classList.remove("hidden");
   requestRoomDirectory();
@@ -2259,9 +2343,9 @@ $("friendsShortcut").addEventListener("click", openFriendsModal);
 $("closeFriends").addEventListener("click", closeFriendsModal);
 $("friendsModal").querySelector("[data-close-friends]").addEventListener("click", closeFriendsModal);
 
-setupEmojiPicker("roomEmojiBtn", "roomEmojiPicker", "chatInput");
-setupEmojiPicker("railEmojiBtn", "railEmojiPicker", "railChatInput");
-setupEmojiPicker("privateEmojiBtn", "privateEmojiPicker", "privateChatInput");
+setupEmojiPicker("roomEmojiBtn", "roomEmojiPicker", "chatInput", "room");
+setupEmojiPicker("railEmojiBtn", "railEmojiPicker", "railChatInput", "room");
+setupEmojiPicker("privateEmojiBtn", "privateEmojiPicker", "privateChatInput", "private");
 $("roomImageBtn").addEventListener("click", () => $("roomImageInput").click());
 $("railImageBtn")?.addEventListener("click", () => $("railImageInput")?.click());
 $("privateImageBtn").addEventListener("click", () => $("privateImageInput").click());
