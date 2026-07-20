@@ -33,3 +33,22 @@ Las credenciales de Twitch se crean desde la consola de desarrolladores de Twitc
 - Tarjetas con título, categoría, espectadores y etiqueta EN VIVO.
 - Los directos pueden agregarse a la cola o reproducirse inmediatamente.
 - Detección de enlaces directos de YouTube y Twitch.
+
+## Inicio de sesión con Discord (V74)
+
+En Discord Developer Portal, abre tu aplicación y agrega esta URL en **OAuth2 > Redirects**:
+
+```text
+https://thesomusic.onrender.com/auth/discord/callback
+```
+
+En Render agrega estas variables de entorno:
+
+```env
+DISCORD_CLIENT_ID=ID_DE_LA_APLICACION
+DISCORD_CLIENT_SECRET=SECRETO_DE_LA_APLICACION
+DISCORD_REDIRECT_URI=https://thesomusic.onrender.com/auth/discord/callback
+SESSION_SECRET=UNA_CLAVE_LARGA_Y_ALEATORIA
+```
+
+El secreto de Discord y `SESSION_SECRET` nunca deben escribirse en `public/app.js`, `public/index.html` ni subirse a GitHub.

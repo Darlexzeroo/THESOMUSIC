@@ -15,6 +15,162 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+app.set("trust proxy", 1);
+
+const DISCORD_COOKIE_NAME = "theso_discord_session";
+const DISCORD_STATE_COOKIE = "theso_discord_state";
+const DISCORD_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+
+function discordSessionSecret() {
+  return process.env.SESSION_SECRET || process.env.DISCORD_CLIENT_SECRET || "";
+}
+
+function parseCookies(req) {
+  const cookies = {};
+  String(req.headers.cookie || "").split(";").forEach(part => {
+    const index = part.indexOf("=");
+    if (index < 0) return;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+  });
+  return cookies;
+}
+
+function signCookieValue(value) {
+  const secret = discordSessionSecret();
+  if (!secret) return "";
+  const signature = crypto.createHmac("sha256", secret).update(value).digest("base64url");
+  return `${value}.${signature}`;
+}
+
+function verifyCookieValue(signedValue) {
+  const secret = discordSessionSecret();
+  if (!secret || !signedValue) return null;
+  const separator = signedValue.lastIndexOf(".");
+  if (separator < 1) return null;
+  const value = signedValue.slice(0, separator);
+  const signature = signedValue.slice(separator + 1);
+  const expected = crypto.createHmac("sha256", secret).update(value).digest("base64url");
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  } catch { return null; }
+  return value;
+}
+
+function setCookie(res, name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Lax"];
+  if (process.env.NODE_ENV === "production" || process.env.RENDER) parts.push("Secure");
+  if (options.maxAge != null) parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
+  res.append("Set-Cookie", parts.join("; "));
+}
+
+function clearCookie(res, name) {
+  setCookie(res, name, "", { maxAge: 0 });
+}
+
+function getDiscordRedirectUri(req) {
+  if (process.env.DISCORD_REDIRECT_URI) return process.env.DISCORD_REDIRECT_URI;
+  return `${req.protocol}://${req.get("host")}/auth/discord/callback`;
+}
+
+function readDiscordUser(req) {
+  const signed = parseCookies(req)[DISCORD_COOKIE_NAME];
+  const payload = verifyCookieValue(signed);
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!parsed?.id || !parsed?.expiresAt || Date.now() > parsed.expiresAt) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+app.get("/auth/discord", (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+  if (!clientId || !clientSecret || !discordSessionSecret()) {
+    return res.status(503).send("Discord Login no está configurado en el servidor.");
+  }
+
+  const state = crypto.randomBytes(24).toString("base64url");
+  setCookie(res, DISCORD_STATE_COOKIE, signCookieValue(state), { maxAge: 10 * 60 });
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: getDiscordRedirectUri(req),
+    scope: "identify",
+    state
+  });
+  res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
+});
+
+app.get("/auth/discord/callback", async (req, res) => {
+  const code = String(req.query.code || "");
+  const state = String(req.query.state || "");
+  const savedState = verifyCookieValue(parseCookies(req)[DISCORD_STATE_COOKIE]);
+  clearCookie(res, DISCORD_STATE_COOKIE);
+
+  if (!code || !state || !savedState || state !== savedState) {
+    return res.redirect("/?discord=error_state");
+  }
+
+  try {
+    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: getDiscordRedirectUri(req)
+      })
+    });
+    const token = await tokenResponse.json();
+    if (!tokenResponse.ok || !token.access_token) throw new Error(token.error_description || "No se pudo obtener el token de Discord.");
+
+    const userResponse = await fetch("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${token.access_token}` }
+    });
+    const user = await userResponse.json();
+    if (!userResponse.ok || !user.id) throw new Error(user.message || "No se pudo leer el perfil de Discord.");
+
+    const displayName = String(user.global_name || user.username || "Usuario Discord").slice(0, 30);
+    const avatar = user.avatar
+      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${String(user.avatar).startsWith("a_") ? "gif" : "png"}?size=256`
+      : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(user.id) >> 22n) % 6}.png`;
+    const sessionUser = {
+      id: String(user.id),
+      username: String(user.username || ""),
+      displayName,
+      avatar,
+      expiresAt: Date.now() + DISCORD_SESSION_MAX_AGE * 1000
+    };
+    const payload = Buffer.from(JSON.stringify(sessionUser)).toString("base64url");
+    setCookie(res, DISCORD_COOKIE_NAME, signCookieValue(payload), { maxAge: DISCORD_SESSION_MAX_AGE });
+    res.redirect("/?discord=success");
+  } catch (error) {
+    console.error("Error en Discord OAuth:", error);
+    res.redirect("/?discord=error");
+  }
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = readDiscordUser(req);
+  res.json({ authenticated: Boolean(user), user: user ? {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    avatar: user.avatar
+  } : null });
+});
+
+app.post("/auth/logout", (_req, res) => {
+  clearCookie(res, DISCORD_COOKIE_NAME);
+  res.json({ ok: true });
+});
+
+
 // Ruta de salud para Render y otros servicios de monitoreo.
 app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "waveroom" });

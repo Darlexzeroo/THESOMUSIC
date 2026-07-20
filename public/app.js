@@ -3009,3 +3009,66 @@ function setSearchProvider(provider) {
 }
 $("youtubeTab")?.addEventListener("click",()=>setSearchProvider("youtube"));
 $("twitchTab")?.addEventListener("click",()=>setSearchProvider("twitch"));
+
+/* V74 · Inicio de sesión con Discord */
+let discordAuthenticatedUser = null;
+
+async function loadDiscordSession() {
+  const card = $("discordLoginCard");
+  const loginButton = $("discordLoginButton");
+  const logoutButton = $("discordLogoutButton");
+  const title = $("discordLoginTitle");
+  const status = $("discordLoginStatus");
+  if (!card || !loginButton || !logoutButton) return;
+
+  try {
+    const response = await fetch("/api/auth/me", { credentials: "same-origin" });
+    const data = await response.json();
+    discordAuthenticatedUser = data.authenticated ? data.user : null;
+
+    card.classList.toggle("is-connected", Boolean(discordAuthenticatedUser));
+    loginButton.classList.toggle("hidden", Boolean(discordAuthenticatedUser));
+    logoutButton.classList.toggle("hidden", !discordAuthenticatedUser);
+
+    if (discordAuthenticatedUser) {
+      title.textContent = discordAuthenticatedUser.displayName || discordAuthenticatedUser.username || "Discord";
+      status.textContent = `Conectado como @${discordAuthenticatedUser.username || "discord"}`;
+      username.value = discordAuthenticatedUser.displayName || discordAuthenticatedUser.username || getName();
+      profilePhotoData = discordAuthenticatedUser.avatar || profilePhotoData;
+      localStorage.setItem("waveroom-name", username.value);
+      if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
+      refreshProfileUI();
+      registerPersistentClient();
+      if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
+    } else {
+      title.textContent = "Cuenta de Discord";
+      status.textContent = "Inicia sesión para usar automáticamente tu nombre y avatar.";
+    }
+  } catch (error) {
+    console.warn("No se pudo comprobar la sesión de Discord:", error);
+    status.textContent = "No se pudo conectar con Discord en este momento.";
+  }
+}
+
+$("discordLogoutButton")?.addEventListener("click", async () => {
+  try {
+    await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
+    discordAuthenticatedUser = null;
+    notify("Sesión de Discord cerrada.");
+    await loadDiscordSession();
+  } catch {
+    notify("No se pudo cerrar la sesión de Discord.");
+  }
+});
+
+(() => {
+  const params = new URLSearchParams(location.search);
+  const result = params.get("discord");
+  if (result === "success") notify("Sesión iniciada con Discord.");
+  else if (result) notify("No se pudo iniciar sesión con Discord.");
+  if (result) {
+    params.delete("discord");
+    history.replaceState({}, "", `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`);
+  }
+  loadDiscordSession();
+})();

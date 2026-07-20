@@ -10,3 +10,12 @@ services:
     envVars:
       - key: YOUTUBE_API_KEY
         sync: false
+
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        value: https://thesomusic.onrender.com/auth/discord/callback
+      - key: SESSION_SECRET
+        generateValue: true

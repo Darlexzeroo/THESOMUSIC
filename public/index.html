@@ -248,6 +248,12 @@
           </div>
           <div class="profile-photo-zone"><div class="profile-upload-icon">◎</div><div><strong>Foto de perfil</strong><small>JPG, PNG, WEBP o GIF animado · máximo 5 MB</small><div class="photo-actions"><label for="profilePhoto">Elegir imagen</label><input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button id="removePhoto" type="button">Quitar</button></div></div></div>
           <div class="profile-photo-zone"><div class="profile-upload-icon banner-icon">▭</div><div><strong>Banner de perfil</strong><small>JPG, PNG, WEBP o GIF · recomendado 600 × 240 · máximo 5 MB</small><div class="photo-actions"><label for="profileBanner">Elegir banner</label><input id="profileBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button id="removeBanner" type="button">Quitar</button></div></div></div>
+          <div class="discord-login-card" id="discordLoginCard">
+            <div class="discord-login-icon" aria-hidden="true">☯</div>
+            <div class="discord-login-copy"><strong id="discordLoginTitle">Cuenta de Discord</strong><small id="discordLoginStatus">Inicia sesión para usar automáticamente tu nombre y avatar.</small></div>
+            <a id="discordLoginButton" class="discord-login-button" href="/auth/discord">Iniciar con Discord</a>
+            <button id="discordLogoutButton" class="discord-logout-button hidden" type="button">Cerrar sesión</button>
+          </div>
           <label for="username">Nombre de usuario</label><input id="username" maxlength="30" value="USER" placeholder="Tu nombre">
         </section>
 
