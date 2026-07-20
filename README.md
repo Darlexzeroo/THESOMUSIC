@@ -59,3 +59,12 @@ El secreto de Discord y `SESSION_SECRET` nunca deben escribirse en `public/app.j
 - Perfiles locales de invitado separados del perfil de Discord.
 - Discord usa siempre el nombre y avatar recibidos de la cuenta, sin mezclar la foto local anterior.
 - Cerrar sesión vuelve a mostrar la pantalla de acceso.
+
+
+## V77
+- Favicon propio de THESO y título corto en la pestaña.
+- Mejoras responsive para móvil, tablet y escritorio.
+- Invitaciones directas a salas desde los chats privados.
+- Notificaciones visuales y sonoras de invitaciones.
+
+Nota: Spotify no se habilita en esta versión porque su reproducción sincronizada requiere OAuth, una aplicación de Spotify y restricciones del Web Playback SDK.

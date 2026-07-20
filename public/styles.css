@@ -3295,3 +3295,46 @@ body.auth-gated { overflow: hidden; }
 .guest-login-form small, .login-gate-status { display:block; margin-top:10px; color:var(--muted,#9aa3b6); font-size:12px; }
 .login-gate-status.error { color:#ff7b88; }
 @media (max-width:560px){ .login-gate-card{padding:28px 20px;border-radius:22px}.guest-login-row{grid-template-columns:1fr}.guest-login-row button{height:46px} }
+
+
+/* V77: responsive refinado, invitaciones y marca THESO */
+#inviteToRoomBtn{border:1px solid rgba(16,219,231,.35);background:rgba(16,219,231,.10);color:var(--text);border-radius:10px;padding:9px 11px;font-weight:750;cursor:pointer}
+#inviteToRoomBtn:hover:not(:disabled){background:rgba(16,219,231,.18);border-color:rgba(16,219,231,.7)}
+#inviteToRoomBtn:disabled{opacity:.42;cursor:not-allowed}
+@media(max-width:1180px){
+  .main-grid{grid-template-columns:minmax(0,1fr)}
+  .right-rail{position:static;max-height:none}
+  .video-stage{min-height:auto}
+  .video-shell{aspect-ratio:16/9;min-height:0}
+}
+@media(max-width:820px){
+  .topbar{padding:10px 12px;gap:8px}
+  .top-search{min-width:0;flex:1}
+  .top-search button{display:none}
+  .mini-profile-copy{display:none}
+  .main-content{padding-bottom:92px}
+  .video-stage,.home-panel{margin-left:10px;margin-right:10px}
+  .video-header{align-items:flex-start;gap:8px}
+  .video-header h2{font-size:18px;line-height:1.2}
+  .video-header-actions{flex-wrap:wrap;justify-content:flex-end}
+  .friends-panel,.room-panel-modal,.profile-panel{width:100%;max-width:none;height:100dvh;max-height:100dvh;border-radius:0}
+  .friends-layout,.room-modal-layout{grid-template-columns:1fr}
+  .friends-list-panel{max-height:34dvh}
+  .private-call-actions{display:flex;flex-wrap:wrap;gap:6px}
+  .private-call-actions button{flex:1;min-width:92px}
+  .player-bar{left:0;right:0;bottom:0;border-radius:0;padding:8px 10px;grid-template-columns:minmax(0,1fr) auto}
+  .player-main{min-width:0}
+  .volume-area{display:none}
+}
+@media(max-width:520px){
+  .video-stage{padding:10px;border-radius:14px}
+  .video-header{display:grid;grid-template-columns:1fr}
+  .video-header-actions{justify-content:flex-start}
+  .media-tabs{overflow-x:auto;scrollbar-width:none}
+  .media-tabs::-webkit-scrollbar{display:none}
+  .search-card,.room-directory-card,.hero-card{padding:14px;border-radius:14px}
+  .player-info img{width:42px;height:42px}
+  .player-controls button{width:34px;height:34px}
+  .progress-row{gap:6px}
+  .progress-row span{font-size:10px}
+}

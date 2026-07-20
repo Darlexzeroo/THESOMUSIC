@@ -545,6 +545,25 @@ io.on("connection", socket => {
     socket.emit("private-chat-global", message);
     callback?.({ ok: true, message });
   });
+  socket.on("room-invite", ({ targetClientId, code } = {}, callback) => {
+    const senderClientId = safeClientId(socketClients.get(socket.id));
+    targetClientId = safeClientId(targetClientId);
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!senderClientId || !targetClientId || !room || !room.users.has(socket.id)) {
+      return callback?.({ ok: false, error: "No se pudo enviar la invitación." });
+    }
+    const sender = room.users.get(socket.id);
+    io.to(`client:${targetClientId}`).emit("room-invite", {
+      code,
+      roomName: room.roomName || `Sala de ${sender?.name || "Usuario"}`,
+      visibility: room.visibility || "public",
+      fromClientId: senderClientId,
+      fromName: sender?.name || "Usuario"
+    });
+    callback?.({ ok: true });
+  });
+
   socket.on("create-room", ({ name, avatar, banner, clientId, visibility, roomName }, callback) => {
     removeFromRooms(socket);
     const code = roomCode();

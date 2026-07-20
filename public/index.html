@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>THESO — Música compartida</title>
+  <title>THESO</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="theme-color" content="#07111f">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -224,7 +226,7 @@
         <main class="private-chat-panel">
           <div id="privateChatEmpty" class="private-chat-empty"><b>💬</b><h3>Selecciona una persona</h3><p>Los mensajes privados solo los podrán ver ustedes dos.</p></div>
           <div id="privateChatActive" class="private-chat-active hidden">
-            <header class="private-chat-header"><div id="privateChatAvatar" class="person-icon">?</div><div class="private-chat-title"><strong id="privateChatName">Usuario</strong><small id="privateCallStatus">Chat privado</small></div><div class="private-call-actions"><button id="privateCallBtn" type="button" title="Llamar en privado">📞 Llamar</button><button id="privateHangupBtn" type="button" class="hidden">Colgar</button></div></header><div id="incomingPrivateCall" class="incoming-call hidden"><span id="incomingPrivateCallText">Llamada privada entrante</span><div><button id="acceptPrivateCall" type="button">Aceptar</button><button id="rejectPrivateCall" type="button">Rechazar</button></div></div>
+            <header class="private-chat-header"><div id="privateChatAvatar" class="person-icon">?</div><div class="private-chat-title"><strong id="privateChatName">Usuario</strong><small id="privateCallStatus">Chat privado</small></div><div class="private-call-actions"><button id="inviteToRoomBtn" type="button" title="Invitar a tu sala">✉ Invitar</button><button id="privateCallBtn" type="button" title="Llamar en privado">📞 Llamar</button><button id="privateHangupBtn" type="button" class="hidden">Colgar</button></div></header><div id="incomingPrivateCall" class="incoming-call hidden"><span id="incomingPrivateCallText">Llamada privada entrante</span><div><button id="acceptPrivateCall" type="button">Aceptar</button><button id="rejectPrivateCall" type="button">Rechazar</button></div></div>
             <div id="privateMessages" class="private-messages"></div>
             <div class="private-compose"><button id="privateEmojiBtn" class="emoji-btn" type="button" title="Emotes">😊</button><button id="privateImageBtn" class="image-btn" type="button" title="Enviar imagen">📎</button><input id="privateImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><div id="privateEmojiPicker" class="emoji-picker hidden"></div><form id="privateChatForm" class="private-chat-form"><input id="privateChatInput" maxlength="400" placeholder="Escribe un mensaje privado..."><button type="submit">➤</button></form></div>
           </div>

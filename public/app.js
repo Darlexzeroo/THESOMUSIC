@@ -608,6 +608,10 @@ function openPrivateChatByClient(clientId) {
   $("privateChatName").textContent = user.name || "Usuario";
   $("privateCallBtn").disabled = !activePrivateUserId || !currentRoom;
   $("privateCallBtn").title = activePrivateUserId && currentRoom ? "Llamar en privado" : "La llamada requiere que ambos estén en la misma sala";
+  if ($("inviteToRoomBtn")) {
+    $("inviteToRoomBtn").disabled = !activePrivateClientId || !currentRoom;
+    $("inviteToRoomBtn").title = currentRoom ? "Invitar a esta persona a tu sala" : "Entra o crea una sala para invitar";
+  }
   $("privateCallStatus").textContent = activePrivateUserId && currentRoom ? "Chat privado · Disponible para llamada" : "Chat privado guardado";
   updatePrivateCallPanel(privateCallActive, $("privateCallStatus").textContent);
   const avatar = $("privateChatAvatar");
@@ -2275,6 +2279,14 @@ for (const [zoneId, sender] of [["messages", sendRoomImage], ["railMessages", se
 }
 $("closeImageViewer").addEventListener("click", () => $("imageViewer").classList.add("hidden"));
 $("imageViewer").addEventListener("click", event => { if (event.target === $("imageViewer")) $("imageViewer").classList.add("hidden"); });
+$("inviteToRoomBtn")?.addEventListener("click", () => {
+  if (!currentRoom || !activePrivateClientId) return notify("Primero entra a una sala y abre el chat de un amigo.");
+  socket.emit("room-invite", { targetClientId: activePrivateClientId, code: currentRoom.code }, response => {
+    notify(response?.ok ? "Invitación enviada." : (response?.error || "No se pudo enviar la invitación."));
+    if (response?.ok) addAppNotification("Invitación enviada", `Invitaste a ${$("privateChatName")?.textContent || "un amigo"} a ${currentRoom.roomName || "tu sala"}.`, "room");
+  });
+});
+
 $("privateCallBtn").addEventListener("click", startPrivateCall);
 $("privateHangupBtn").addEventListener("click", () => endPrivateCall(true));
 $("acceptPrivateCall").addEventListener("click", acceptPrivateCallInvite);
@@ -2543,6 +2555,20 @@ socket.on("voice-signal", async ({ from, data }) => {
   }
 });
 
+
+socket.on("room-invite", invite => {
+  const roomLabel = invite?.roomName || "una sala";
+  const sender = invite?.fromName || "Un amigo";
+  addAppNotification("Invitación a sala", `${sender} te invitó a ${roomLabel}.`, "room");
+  playNotificationSound();
+  showPrivateMessageToast({ author: sender, text: `Te invitó a ${roomLabel}` }, invite?.fromClientId || "");
+  if (confirm(`${sender} te invitó a ${roomLabel}. ¿Quieres entrar ahora?`)) {
+    if (currentRoom) return notify("Primero sal de tu sala actual para aceptar otra invitación.");
+    const codeInput = $("roomCodeInput");
+    if (codeInput) codeInput.value = invite.code || "";
+    $("joinRoom")?.click();
+  }
+});
 
 socket.on("private-call-invite", ({ from, name }) => {
   addFriendsNotification("Llamada privada", `${name || "Un usuario"} te está llamando.`, { icon: "📞", userId: from });
