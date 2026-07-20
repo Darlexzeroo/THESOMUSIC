@@ -1885,6 +1885,18 @@ async function addYouTubeLinkDirectlyToQueue(value, optionalTitle = "") {
   return true;
 }
 
+function clearYouTubeLinkFields() {
+  if ($("youtubeUrl")) $("youtubeUrl").value = "";
+  if ($("searchInput") && searchProvider === "youtube") $("searchInput").value = "";
+  if ($("searchMirror")) $("searchMirror").value = "";
+}
+
+function clearTwitchLinkFields() {
+  if ($("twitchUrl")) $("twitchUrl").value = "";
+  if ($("searchInput") && searchProvider === "twitch") $("searchInput").value = "";
+  if ($("twitchSearchInput")) $("twitchSearchInput").value = "";
+}
+
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   const query = $("searchInput").value.trim();
@@ -1895,6 +1907,7 @@ $("searchForm").addEventListener("submit", async event => {
     const video = videoFromTwitchLink(query);
     if (video && /twitch\.tv/i.test(query)) {
       await startSelectedVideo(video);
+      clearTwitchLinkFields();
       $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
       $("twitchSearchResults").innerHTML = "";
     } else {
@@ -1910,6 +1923,7 @@ $("searchForm").addEventListener("submit", async event => {
   if (parseYouTubeId(query)) {
     const added = await addYouTubeLinkDirectlyToQueue(query);
     if (added) {
+      clearYouTubeLinkFields();
       $("searchStatus").textContent = "Enlace de YouTube agregado a su cola.";
       $("searchResults").innerHTML = "";
     }
@@ -1935,7 +1949,7 @@ $("videoForm").addEventListener("submit", async event => {
   if (!parseYouTubeId(url)) return notify("Pega un enlace válido de YouTube.");
   const added = await addYouTubeLinkDirectlyToQueue(url);
   if (added) {
-    $("youtubeUrl").value = "";
+    clearYouTubeLinkFields();
     $("searchStatus").textContent = "Enlace de YouTube agregado a su cola.";
   }
 });
@@ -1946,7 +1960,7 @@ $("twitchVideoForm")?.addEventListener("submit", async event => {
   const video = videoFromTwitchLink(url);
   if (!video || !/twitch\.tv/i.test(url)) return notify("Pega un enlace válido de Twitch.");
   await startSelectedVideo(video);
-  $("twitchUrl").value = "";
+  clearTwitchLinkFields();
   $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
 });
 
@@ -2529,6 +2543,7 @@ $("twitchSearchBtn")?.addEventListener("click", async () => {
   const video = videoFromTwitchLink(query);
   if (video && /twitch\.tv/i.test(query)) {
     await startSelectedVideo(video);
+    clearTwitchLinkFields();
     $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
     $("twitchSearchResults").innerHTML = "";
   } else {
