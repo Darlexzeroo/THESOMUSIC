@@ -2368,6 +2368,14 @@ $("profileForm").addEventListener("submit", event => {
     if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
     else localStorage.removeItem("waveroom-banner");
     if (activeLoginMode === "guest") saveGuestProfile();
+    if (activeLoginMode === "discord") {
+      // Quitar la foto personalizada vuelve al avatar oficial de Discord.
+      if (!profilePhotoData && discordAuthenticatedUser?.avatar) {
+        profilePhotoData = discordAuthenticatedUser.avatar;
+        localStorage.setItem("waveroom-photo", profilePhotoData);
+      }
+      saveDiscordProfile();
+    }
   } catch {
     return notify("No se pudo guardar: reduce el peso del GIF o del banner.");
   }
@@ -3019,6 +3027,27 @@ const LOGIN_MODE_KEY = "theso-login-mode";
 const GUEST_NAME_KEY = "theso-guest-name";
 const GUEST_PHOTO_KEY = "theso-guest-photo";
 const GUEST_BANNER_KEY = "theso-guest-banner";
+const DISCORD_PROFILE_PREFIX = "theso-discord-profile-";
+
+function discordProfileStorageKey(userId, field) {
+  return `${DISCORD_PROFILE_PREFIX}${String(userId || "unknown")}-${field}`;
+}
+
+function saveDiscordProfile() {
+  if (!discordAuthenticatedUser?.id) return;
+  const photoKey = discordProfileStorageKey(discordAuthenticatedUser.id, "photo");
+  const bannerKey = discordProfileStorageKey(discordAuthenticatedUser.id, "banner");
+  try {
+    // Si no hay foto personalizada, se usa de nuevo el avatar oficial de Discord.
+    if (profilePhotoData && profilePhotoData !== discordAuthenticatedUser.avatar) {
+      localStorage.setItem(photoKey, profilePhotoData);
+    } else {
+      localStorage.removeItem(photoKey);
+    }
+    if (profileBannerData) localStorage.setItem(bannerKey, profileBannerData);
+    else localStorage.removeItem(bannerKey);
+  } catch {}
+}
 
 function setLoginGateVisible(visible, message = "") {
   const gate = $("loginGate");
@@ -3073,15 +3102,18 @@ function applyDiscordProfile(user) {
   discordAuthenticatedUser = user;
   const displayName = user.displayName || user.username || "Usuario Discord";
   username.value = displayName;
-  // El avatar de Discord siempre tiene prioridad y nunca se mezcla con la foto local del invitado.
-  profilePhotoData = user.avatar || "";
-  // El banner local del invitado no se aplica a una cuenta de Discord.
-  profileBannerData = "";
+  // Discord y los invitados usan perfiles separados. Las personalizaciones de
+  // esta cuenta se guardan por su ID y sobreviven al cierre de sesión.
+  const savedDiscordPhoto = localStorage.getItem(discordProfileStorageKey(user.id, "photo")) || "";
+  const savedDiscordBanner = localStorage.getItem(discordProfileStorageKey(user.id, "banner")) || "";
+  profilePhotoData = savedDiscordPhoto || user.avatar || "";
+  profileBannerData = savedDiscordBanner;
   localStorage.setItem(LOGIN_MODE_KEY, "discord");
   localStorage.setItem("waveroom-name", displayName);
   if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
   else localStorage.removeItem("waveroom-photo");
-  localStorage.removeItem("waveroom-banner");
+  if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
+  else localStorage.removeItem("waveroom-banner");
   refreshProfileUI();
   registerPersistentClient();
   if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
