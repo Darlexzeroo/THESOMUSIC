@@ -1,8 +1,8 @@
 {
   "name": "waveroom-youtube",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Reproductor de YouTube con salas sincronizadas",
+  "description": "THESO con salas, Discord, amigos y chats privados persistentes en MongoDB Atlas",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,6 +10,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "mongoose": "^8.24.1",
     "socket.io": "^4.8.1"
   },
   "engines": {

@@ -68,3 +68,42 @@ El secreto de Discord y `SESSION_SECRET` nunca deben escribirse en `public/app.j
 - Notificaciones visuales y sonoras de invitaciones.
 
 Nota: Spotify no se habilita en esta versión porque su reproducción sincronizada requiere OAuth, una aplicación de Spotify y restricciones del Web Playback SDK.
+
+
+## V79 - MongoDB Atlas, amigos y chats privados permanentes
+
+Esta versión agrega persistencia real para usuarios que inician sesión con Discord:
+
+- Solicitudes de amistad desde la lista de usuarios de una sala.
+- Aceptar o rechazar solicitudes desde el panel **Amigos**.
+- Lista de amigos disponible aunque salgan de la sala.
+- Conversaciones privadas guardadas en MongoDB Atlas.
+- Historial recuperable al cerrar el navegador, cambiar de dispositivo o reiniciar Render.
+- Los invitados conservan únicamente chats temporales del navegador/servidor y no pueden crear amistades permanentes.
+
+### Configuración gratuita de MongoDB Atlas
+
+1. Crea una cuenta en MongoDB Atlas y un clúster gratuito.
+2. En **Database Access**, crea un usuario de base de datos.
+3. En **Network Access**, permite el acceso desde Render. Para una prueba inicial puedes usar `0.0.0.0/0` y una contraseña fuerte.
+4. Copia la cadena de conexión y reemplaza `<password>` por la contraseña real.
+5. En Render abre **Environment** y agrega:
+
+```env
+MONGODB_URI=mongodb+srv://USUARIO:CONTRASEÑA@CLUSTER.mongodb.net/theso?retryWrites=true&w=majority
+```
+
+No escribas `MONGODB_URI` en archivos públicos ni la subas a GitHub.
+
+### Variables necesarias en Render
+
+```env
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+DISCORD_REDIRECT_URI=https://thesomusic.onrender.com/auth/discord/callback
+SESSION_SECRET=...
+MONGODB_URI=...
+YOUTUBE_API_KEY=...
+```
+
+Puedes revisar la conexión visitando `/api/database/status`. Debe responder `connected: true`.

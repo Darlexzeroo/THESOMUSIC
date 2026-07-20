@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const { Server } = require("socket.io");
+const db = require("./database");
 
 const app = express();
 const server = http.createServer(app);
@@ -163,6 +164,10 @@ app.get("/api/auth/me", (req, res) => {
     displayName: user.displayName,
     avatar: user.avatar
   } : null });
+});
+
+app.get("/api/database/status", (_req, res) => {
+  res.json({ connected: db.isMongoReady(), provider: "MongoDB Atlas" });
 });
 
 app.post("/auth/logout", (_req, res) => {
@@ -459,91 +464,174 @@ function removeFromRooms(socket) {
 }
 
 io.on("connection", socket => {
+  const discordSession = readDiscordUser(socket.request);
+  const authenticatedIdentityId = discordSession?.id ? `discord_${safeClientId(discordSession.id)}` : "";
+  socket.data.discordSession = discordSession || null;
+  socket.data.identityId = authenticatedIdentityId;
   socket.emit("rooms-list", roomDirectory());
   socket.on("list-rooms", (_payload, callback) => callback?.({ ok: true, rooms: roomDirectory() }));
-  socket.on("register-client", ({ clientId, name, avatar, banner } = {}, callback) => {
-    clientId = safeClientId(clientId);
-    if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
+  socket.on("register-client", async ({ clientId, name, avatar, banner } = {}, callback) => {
+    try {
+      clientId = authenticatedIdentityId || safeClientId(clientId);
+      if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
 
-    // Si este socket se registró antes con otra identidad, sale del canal anterior.
-    const previousClientId = socketClients.get(socket.id);
-    if (previousClientId && previousClientId !== clientId) {
-      socket.leave(`client:${previousClientId}`);
-      const previousProfile = connectedClients.get(previousClientId);
-      if (previousProfile?.socketId === socket.id) connectedClients.delete(previousClientId);
+      const previousClientId = socketClients.get(socket.id);
+      if (previousClientId && previousClientId !== clientId) {
+        socket.leave(`client:${previousClientId}`);
+        const previousProfile = connectedClients.get(previousClientId);
+        if (previousProfile?.socketId === socket.id) connectedClients.delete(previousClientId);
+      }
+
+      const profile = {
+        socketId: socket.id,
+        name: String(name || discordSession?.displayName || "Usuario").trim().slice(0, 30),
+        avatar: String(avatar || discordSession?.avatar || "").slice(0, 3 * 1024 * 1024),
+        banner: String(banner || "").slice(0, 3 * 1024 * 1024),
+        authenticated: Boolean(authenticatedIdentityId)
+      };
+      connectedClients.set(clientId, profile);
+      socketClients.set(socket.id, clientId);
+      socket.data.identityId = clientId;
+      socket.join(`client:${clientId}`);
+      rememberContact(clientId, profile.name, profile.avatar, profile.banner);
+      if (authenticatedIdentityId && discordSession) {
+        await db.upsertDiscordUser(clientId, discordSession, profile);
+      }
+      callback?.({ ok: true, clientId, authenticated: Boolean(authenticatedIdentityId), database: db.isMongoReady() });
+    } catch (error) {
+      console.error("Error registrando cliente:", error);
+      callback?.({ ok: false, error: "No se pudo registrar tu cuenta." });
     }
-
-    const profile = {
-      socketId: socket.id,
-      name: String(name || "Usuario").trim().slice(0, 30),
-      avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
-      banner: String(banner || "").slice(0, 3 * 1024 * 1024)
-    };
-    connectedClients.set(clientId, profile);
-    socketClients.set(socket.id, clientId);
-    socket.join(`client:${clientId}`);
-    rememberContact(clientId, profile.name, profile.avatar, profile.banner);
-    callback?.({ ok: true, clientId });
   });
 
-  socket.on("private-conversations", ({ clientId } = {}, callback) => {
-    clientId = safeClientId(clientId || socketClients.get(socket.id));
-    if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
-    const ids = new Set();
-    for (const [key, messages] of Object.entries(persistentPrivateChats)) {
-      if (key === "__contacts" || !Array.isArray(messages)) continue;
-      const parts = key.split(":");
-      if (parts.includes(clientId)) parts.filter(id => id !== clientId).forEach(id => ids.add(id));
+  socket.on("friend-state", async (_payload = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) {
+        return callback?.({ ok: false, error: "Inicia sesión con Discord para usar amigos permanentes.", friends: [], incoming: [], outgoing: [] });
+      }
+      const state = await db.getFriendState(clientId);
+      const decorate = item => ({ ...item, ...getContactMeta(item.clientId), online: Boolean(connectedClients.get(item.clientId)) });
+      callback?.({ ok: true, database: db.isMongoReady(), friends: state.friends.map(decorate), incoming: state.incoming.map(decorate), outgoing: state.outgoing.map(decorate) });
+    } catch (error) {
+      callback?.({ ok: false, error: error.message || "No se pudieron cargar tus amigos." });
     }
-    callback?.({ ok: true, contacts: [...ids].map(getContactMeta).sort((a,b) => Number(b.online)-Number(a.online) || a.name.localeCompare(b.name)) });
   });
 
-  socket.on("private-chat-history-global", ({ clientId, targetClientId } = {}, callback) => {
-    clientId = safeClientId(clientId || socketClients.get(socket.id));
-    targetClientId = safeClientId(targetClientId);
-    if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
-    callback?.({ ok: true, messages: persistentPrivateChats[persistentChatKey(clientId, targetClientId)] || [] });
+  socket.on("friend-request-send", async ({ targetClientId } = {}, callback) => {
+    try {
+      const senderId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!authenticatedIdentityId || senderId !== authenticatedIdentityId) throw new Error("Inicia sesión con Discord para enviar solicitudes.");
+      if (!targetClientId.startsWith("discord_")) throw new Error("Ese usuario debe iniciar sesión con Discord.");
+      const result = await db.sendFriendRequest(senderId, targetClientId);
+      if (result.reverseRequest) {
+        const accepted = await db.respondFriendRequest(String(result.reverseRequest._id), senderId, true);
+        io.to(`client:${targetClientId}`).emit("friend-state-changed", { type: "accepted", by: senderId });
+        socket.emit("friend-state-changed", { type: "accepted", by: targetClientId });
+        return callback?.({ ok: true, accepted: true, message: "Solicitud cruzada aceptada: ahora son amigos." });
+      }
+      const sender = getContactMeta(senderId);
+      io.to(`client:${targetClientId}`).emit("friend-request-received", { requestId: String(result.request._id), clientId: senderId, name: sender.name, avatar: sender.avatar });
+      callback?.({ ok: true, message: "Solicitud de amistad enviada." });
+    } catch (error) {
+      callback?.({ ok: false, error: error.message || "No se pudo enviar la solicitud." });
+    }
   });
 
-  socket.on("private-chat-global", ({ clientId, targetClientId, text, image } = {}, callback) => {
-    clientId = safeClientId(clientId || socketClients.get(socket.id));
-    targetClientId = safeClientId(targetClientId);
-    if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "Conversación no válida." });
-    text = String(text || "").trim().slice(0, 400);
-    image = sanitizeChatImage(image);
-    if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
-    const senderLive = connectedClients.get(clientId);
-    const senderMeta = getContactMeta(clientId);
-    const targetMeta = getContactMeta(targetClientId);
-    rememberContact(clientId, senderMeta.name, senderMeta.avatar, senderMeta.banner);
-    rememberContact(targetClientId, targetMeta.name, targetMeta.avatar, targetMeta.banner);
-    const message = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      from: socket.id,
-      to: targetMeta.socketId,
-      fromSocketId: socket.id,
-      fromClientId: clientId,
-      toClientId: targetClientId,
-      author: senderLive?.name || senderMeta.name || "Usuario",
-      text,
-      image,
-      createdAt: Date.now()
-    };
-    const key = persistentChatKey(clientId, targetClientId);
-    const history = persistentPrivateChats[key] || [];
-    history.push(message);
-    persistentPrivateChats[key] = history.slice(-150);
-    savePersistentPrivateChats();
-    // Entrega en tiempo real a todas las pestañas/conexiones del destinatario.
-    // Usar el canal de clientId evita depender de un socketId que pudo cambiar
-    // después de una reconexión.
-    // Evento exclusivo de aviso para el destinatario. Se mantiene separado
-    // del evento que actualiza el historial para que la notificación no dependa
-    // de si el chat está abierto, cerrado o acaba de reconectarse.
-    io.to(`client:${targetClientId}`).emit("private-message-notification", message);
-    io.to(`client:${targetClientId}`).emit("private-chat-global", message);
-    socket.emit("private-chat-global", message);
-    callback?.({ ok: true, message });
+  socket.on("friend-request-respond", async ({ requestId, accept } = {}, callback) => {
+    try {
+      const receiverId = socketClients.get(socket.id);
+      if (!authenticatedIdentityId || receiverId !== authenticatedIdentityId) throw new Error("Inicia sesión con Discord.");
+      const request = await db.respondFriendRequest(String(requestId || ""), receiverId, Boolean(accept));
+      io.to(`client:${request.senderId}`).emit("friend-state-changed", { type: accept ? "accepted" : "rejected", by: receiverId });
+      socket.emit("friend-state-changed", { type: accept ? "accepted" : "rejected", by: request.senderId });
+      callback?.({ ok: true, accepted: Boolean(accept) });
+    } catch (error) {
+      callback?.({ ok: false, error: error.message || "No se pudo responder la solicitud." });
+    }
+  });
+
+  socket.on("private-conversations", async (_payload = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
+      if (authenticatedIdentityId && db.isMongoReady()) {
+        const [state, conversationContacts] = await Promise.all([db.getFriendState(clientId), db.getConversationContacts(clientId)]);
+        const merged = new Map();
+        [...state.friends, ...conversationContacts].forEach(contact => merged.set(contact.clientId, { ...contact, ...getContactMeta(contact.clientId) }));
+        return callback?.({ ok: true, contacts: [...merged.values()] });
+      }
+      const ids = new Set();
+      for (const [key, messages] of Object.entries(persistentPrivateChats)) {
+        if (key === "__contacts" || !Array.isArray(messages)) continue;
+        const parts = key.split(":");
+        if (parts.includes(clientId)) parts.filter(id => id !== clientId).forEach(id => ids.add(id));
+      }
+      callback?.({ ok: true, contacts: [...ids].map(getContactMeta) });
+    } catch (error) {
+      callback?.({ ok: false, error: "No se pudieron cargar las conversaciones." });
+    }
+  });
+
+  socket.on("private-chat-history-global", async ({ targetClientId } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
+      if (authenticatedIdentityId && db.isMongoReady()) {
+        if (!(await db.areFriends(clientId, targetClientId))) return callback?.({ ok: false, error: "Deben ser amigos para conservar este chat." });
+        const messages = await db.getMessages(clientId, targetClientId, 150);
+        const contacts = new Map([getContactMeta(clientId), getContactMeta(targetClientId)].map(x => [x.clientId, x]));
+        messages.forEach(message => { message.author = contacts.get(message.fromClientId)?.name || "Usuario"; });
+        return callback?.({ ok: true, messages });
+      }
+      callback?.({ ok: true, messages: persistentPrivateChats[persistentChatKey(clientId, targetClientId)] || [] });
+    } catch (error) {
+      callback?.({ ok: false, error: error.message || "No se pudo cargar el historial." });
+    }
+  });
+
+  socket.on("private-chat-global", async ({ targetClientId, text, image } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "Conversación no válida." });
+      text = String(text || "").trim().slice(0, 400);
+      image = sanitizeChatImage(image);
+      if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
+      const senderMeta = getContactMeta(clientId);
+      const targetMeta = getContactMeta(targetClientId);
+      let message;
+      if (authenticatedIdentityId && db.isMongoReady()) {
+        if (!(await db.areFriends(clientId, targetClientId))) return callback?.({ ok: false, error: "Primero deben aceptar la solicitud de amistad." });
+        message = await db.saveMessage(clientId, targetClientId, text, image, senderMeta.name);
+      } else {
+        message = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          from: socket.id,
+          to: targetMeta.socketId,
+          fromSocketId: socket.id,
+          fromClientId: clientId,
+          toClientId: targetClientId,
+          author: senderMeta.name || "Usuario",
+          text,
+          image,
+          createdAt: Date.now()
+        };
+        const key = persistentChatKey(clientId, targetClientId);
+        const history = persistentPrivateChats[key] || [];
+        history.push(message);
+        persistentPrivateChats[key] = history.slice(-150);
+        savePersistentPrivateChats();
+      }
+      io.to(`client:${targetClientId}`).emit("private-message-notification", message);
+      io.to(`client:${targetClientId}`).emit("private-chat-global", message);
+      socket.emit("private-chat-global", message);
+      callback?.({ ok: true, message });
+    } catch (error) {
+      callback?.({ ok: false, error: error.message || "No se pudo enviar el mensaje." });
+    }
   });
   socket.on("room-invite", ({ targetClientId, code } = {}, callback) => {
     const senderClientId = safeClientId(socketClients.get(socket.id));
@@ -981,12 +1069,19 @@ io.on("connection", socket => {
   });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`WaveRoom YouTube iniciado en http://localhost:${PORT}`);
-
-  if (process.env.YOUTUBE_API_KEY) {
-    console.log("✅ YouTube API Key cargada correctamente.");
-  } else {
-    console.log("❌ No se encontró YOUTUBE_API_KEY.");
+async function startServer() {
+  try {
+    await db.connectMongo();
+  } catch (error) {
+    console.error("No se pudo conectar con MongoDB Atlas:", error.message);
+    console.warn("THESO continuará en modo temporal hasta corregir MONGODB_URI.");
   }
-});
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`THESO iniciado en http://localhost:${PORT}`);
+    console.log(db.isMongoReady() ? "✅ MongoDB Atlas conectado." : "⚠️ MongoDB no conectado: chats temporales.");
+    console.log(process.env.YOUTUBE_API_KEY ? "✅ YouTube API Key cargada correctamente." : "❌ No se encontró YOUTUBE_API_KEY.");
+  });
+}
+
+startServer();

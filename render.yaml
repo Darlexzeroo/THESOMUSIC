@@ -19,3 +19,5 @@ services:
         value: https://thesomusic.onrender.com/auth/discord/callback
       - key: SESSION_SECRET
         generateValue: true
+      - key: MONGODB_URI
+        sync: false

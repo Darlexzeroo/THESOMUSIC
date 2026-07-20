@@ -18,8 +18,9 @@ const username = $("username");
 const toast = $("toast");
 let profilePhotoData = localStorage.getItem("waveroom-photo") || "";
 let profileBannerData = localStorage.getItem("waveroom-banner") || "";
-const persistentClientId = localStorage.getItem("waveroom-client-id") || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-localStorage.setItem("waveroom-client-id", persistentClientId);
+const browserGuestClientId = localStorage.getItem("waveroom-client-id") || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+localStorage.setItem("waveroom-client-id", browserGuestClientId);
+let persistentClientId = browserGuestClientId;
 
 let voiceStream = null;
 let voiceRawStream = null;
@@ -37,6 +38,10 @@ let voiceNoiseFilterEnabled = localStorage.getItem("waveroom-voice-noise-filter"
 let activePrivateUserId = null;
 let activePrivateClientId = null;
 let savedPrivateContacts = [];
+let persistentFriends = [];
+let incomingFriendRequests = [];
+let outgoingFriendRequests = [];
+let databaseConnected = false;
 const privateUnread = new Map();
 const privateMessageCache = new Map();
 let privateCallPeer = null;
@@ -592,6 +597,47 @@ function getRoomUser(id) {
   return currentRoom?.users?.find(user => user.id === id) || null;
 }
 
+function sendFriendRequest(targetClientId) {
+  if (activeLoginMode !== "discord") return notify("Inicia sesión con Discord para agregar amigos.");
+  socket.emit("friend-request-send", { targetClientId }, response => {
+    if (!response?.ok) return notify(response?.error || "No se pudo enviar la solicitud.");
+    notify(response.message || "Solicitud de amistad enviada.");
+    loadFriendState();
+  });
+}
+
+function respondFriendRequest(requestId, accept) {
+  socket.emit("friend-request-respond", { requestId, accept }, response => {
+    if (!response?.ok) return notify(response?.error || "No se pudo responder la solicitud.");
+    notify(accept ? "Solicitud aceptada." : "Solicitud rechazada.");
+    loadFriendState();
+    loadFriendState();
+    loadPrivateConversations();
+  });
+}
+
+function loadFriendState() {
+  if (!socket.connected || activeLoginMode !== "discord") {
+    persistentFriends = [];
+    incomingFriendRequests = [];
+    outgoingFriendRequests = [];
+    renderFriendsList();
+    return;
+  }
+  socket.emit("friend-state", {}, response => {
+    if (!response?.ok) {
+      databaseConnected = Boolean(response?.database);
+      renderFriendsList();
+      return;
+    }
+    databaseConnected = Boolean(response.database);
+    persistentFriends = response.friends || [];
+    incomingFriendRequests = response.incoming || [];
+    outgoingFriendRequests = response.outgoing || [];
+    renderFriendsList();
+  });
+}
+
 function renderFriendsList() {
   const roomUsers = (currentRoom?.users || []).filter(user => user.id !== mySocketId).map(user => ({
     socketId: user.id,
@@ -602,11 +648,27 @@ function renderFriendsList() {
     inRoom: true,
     host: user.id === currentRoom?.hostId
   }));
-  const merged = new Map(savedPrivateContacts.map(contact => [contact.clientId, { ...contact, socketId: contact.socketId || null, inRoom: false }]));
+  const merged = new Map();
+  [...savedPrivateContacts, ...persistentFriends].forEach(contact => merged.set(contact.clientId, { ...contact, socketId: contact.socketId || null, inRoom: false }));
   roomUsers.forEach(user => merged.set(user.clientId, { ...(merged.get(user.clientId) || {}), ...user }));
-  const users = [...merged.values()].filter(user => user.clientId && user.clientId !== persistentClientId);
+  const friendIds = new Set(persistentFriends.map(friend => friend.clientId));
+  const users = [...merged.values()].filter(user => user.clientId && user.clientId !== persistentClientId && (activeLoginMode !== "discord" || friendIds.has(user.clientId)));
   $("friendsCount").textContent = users.length;
-  $("friendsList").innerHTML = users.length ? users.map(user => {
+
+  const incomingHtml = incomingFriendRequests.length ? `<section class="friend-request-section"><strong>Solicitudes recibidas</strong>${incomingFriendRequests.map(user => `
+    <div class="friend-row friend-request-row">
+      <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>
+      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small>Quiere agregarte</small></span>
+      <span class="friend-request-actions"><button type="button" data-request-accept="${escapeHtml(user.requestId)}">✓</button><button type="button" data-request-reject="${escapeHtml(user.requestId)}">×</button></span>
+    </div>`).join("")}</section>` : "";
+
+  const outgoingHtml = outgoingFriendRequests.length ? `<section class="friend-request-section"><strong>Solicitudes enviadas</strong>${outgoingFriendRequests.map(user => `
+    <div class="friend-row friend-request-row pending">
+      <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>
+      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small>Pendiente</small></span>
+    </div>`).join("")}</section>` : "";
+
+  const friendsHtml = users.length ? `<section class="friend-request-section"><strong>${activeLoginMode === "discord" ? "Amigos" : "Conversaciones temporales"}</strong>${users.map(user => {
     const unread = privateUnread.get(user.clientId) || 0;
     const selected = activePrivateClientId === user.clientId;
     return `<button class="friend-row${selected ? " active" : ""}" type="button" data-friend-client="${escapeHtml(user.clientId)}">
@@ -614,13 +676,17 @@ function renderFriendsList() {
       <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small>${user.inRoom ? (user.host ? "Anfitrión · En la sala" : "En la sala") : (user.online ? "En línea" : "Sin conexión")}</small></span>
       ${unread ? `<b class="friend-unread">${unread > 99 ? "99+" : unread}</b>` : ""}
     </button>`;
-  }).join("") : '<p class="friends-empty">Tus conversaciones privadas aparecerán aquí, incluso cuando no estés en una sala.</p>';
+  }).join("")}</section>` : "";
 
-  $("friendsList").querySelectorAll("[data-friend-client]").forEach(button => {
-    button.addEventListener("click", () => openPrivateChatByClient(button.dataset.friendClient));
-  });
+  const loginHint = activeLoginMode !== "discord"
+    ? '<p class="friends-empty">Inicia sesión con Discord para guardar amigos y conversaciones en MongoDB Atlas.</p>'
+    : (!databaseConnected ? '<p class="friends-empty">MongoDB Atlas no está conectado. Configura MONGODB_URI en Render.</p>' : "");
+
+  $("friendsList").innerHTML = incomingHtml + outgoingHtml + friendsHtml + loginHint || '<p class="friends-empty">Aún no tienes amigos. Agrégalos desde una sala.</p>';
+  $("friendsList").querySelectorAll("[data-friend-client]").forEach(button => button.addEventListener("click", () => openPrivateChatByClient(button.dataset.friendClient)));
+  $("friendsList").querySelectorAll("[data-request-accept]").forEach(button => button.addEventListener("click", () => respondFriendRequest(button.dataset.requestAccept, true)));
+  $("friendsList").querySelectorAll("[data-request-reject]").forEach(button => button.addEventListener("click", () => respondFriendRequest(button.dataset.requestReject, false)));
 }
-
 
 function mergePrivateMessages(clientId, messages = []) {
   if (!clientId) return [];
@@ -1198,8 +1264,10 @@ function renderRoom(room) {
         <strong>${escapeHtml(user.name)}</strong>
         <span>${user.id === room.hostId ? "Anfitrión" : "Oyente"}${user.id === mySocketId ? " · Tú" : ""}</span>
       </div>
+      ${user.id !== mySocketId ? `<button class="person-add-friend" type="button" data-add-friend="${escapeHtml(user.clientId || user.id)}" title="Enviar solicitud de amistad">＋</button>` : ""}
     </div>
   `).join("");
+  $("people").querySelectorAll("[data-add-friend]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); sendFriendRequest(button.dataset.addFriend); }));
   refreshRoomSpeakingIndicators();
 
   $("queueCount").textContent = room.queue.length;
@@ -2696,6 +2764,18 @@ socket.on("private-call-end", ({ from }) => {
 
 // El servidor envía este evento únicamente al destinatario. Así el aviso
 // aparece siempre, incluso cuando la conversación ya está abierta.
+socket.on("friend-request-received", request => {
+  addFriendsNotification("Nueva solicitud de amistad", `${request.name || "Un usuario"} quiere agregarte.`, { clientId: request.clientId, icon: "👋" });
+  notify(`${request.name || "Un usuario"} te envió una solicitud de amistad.`);
+  loadFriendState();
+});
+
+socket.on("friend-state-changed", ({ type } = {}) => {
+  notify(type === "accepted" ? "Ahora son amigos." : "La solicitud fue actualizada.");
+  loadFriendState();
+  loadPrivateConversations();
+});
+
 socket.on("private-message-notification", message => {
   if (!message || message.fromClientId === persistentClientId) return;
   const otherClientId = message.fromClientId;
@@ -3190,6 +3270,7 @@ function saveGuestProfile() {
 
 function applyGuestProfile(name) {
   activeLoginMode = "guest";
+  persistentClientId = browserGuestClientId;
   discordAuthenticatedUser = null;
   const guestName = String(name || localStorage.getItem(GUEST_NAME_KEY) || "Invitado").trim().slice(0, 30) || "Invitado";
   username.value = guestName;
@@ -3209,6 +3290,7 @@ function applyGuestProfile(name) {
 
 function applyDiscordProfile(user) {
   activeLoginMode = "discord";
+  persistentClientId = `discord_${String(user.id || "").replace(/[^0-9]/g, "")}`;
   discordAuthenticatedUser = user;
   const displayName = user.displayName || user.username || "Usuario Discord";
   username.value = displayName;

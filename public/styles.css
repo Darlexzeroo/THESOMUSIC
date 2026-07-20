@@ -3349,3 +3349,38 @@ body.auth-gated { overflow: hidden; }
 .emoji-picker .add-custom-emote{border:1px dashed #42516b!important;background:#111a29!important;color:#13e2ef;font-size:25px!important;font-weight:800}
 .rail-room-chat.hidden{display:none!important}
 @media(max-width:700px){.emoji-picker-scroll{grid-template-columns:repeat(5,minmax(32px,1fr));max-height:190px}.rail-emoji-picker{left:8px!important;right:8px!important;width:auto!important;max-width:none!important}}
+
+/* V79 · Amistades permanentes y MongoDB Atlas */
+.person { position: relative; }
+.person-add-friend {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+  color: inherit;
+  font-size: 20px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.person-add-friend:hover { background: rgba(94,234,212,.16); border-color: rgba(94,234,212,.4); }
+.friend-request-section { display: grid; gap: 8px; margin-bottom: 14px; }
+.friend-request-section > strong { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; padding: 0 4px; }
+.friend-request-row { cursor: default; }
+.friend-request-row.pending { opacity: .72; }
+.friend-request-actions { display: flex; gap: 6px; margin-left: auto; }
+.friend-request-actions button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: 800;
+}
+.friend-request-actions button:first-child { background: rgba(34,197,94,.22); color: #86efac; }
+.friend-request-actions button:last-child { background: rgba(239,68,68,.18); color: #fca5a5; }
+@media (max-width: 700px) {
+  .person-add-friend { width: 32px; height: 32px; }
+  .friend-request-actions { gap: 4px; }
+}
