@@ -82,7 +82,11 @@
 
       <section class="video-stage" id="videoStage">
         <div class="video-header"><div><span>REPRODUCIENDO AHORA</span><h2 id="videoStageTitle">Canción</h2></div><div class="video-header-actions"><button id="mediaModeBtn" class="media-mode-btn" type="button" aria-pressed="false">🎧 Solo audio</button><span id="roleBadge">Modo individual</span></div></div>
-        <div class="video-shell"><div id="youtubePlayer"></div><iframe id="twitchPlayer" class="twitch-player hidden" title="Reproductor de Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0" referrerpolicy="strict-origin-when-cross-origin"></iframe><button id="activateAudioBtn" class="audio-unlock hidden" type="button">▶ Activar reproducción</button></div>
+        <div class="video-shell">
+  <div id="youtubePlayerShell" class="provider-player-shell youtube-player-shell"><div id="youtubePlayer"></div></div>
+  <div id="twitchPlayerShell" class="provider-player-shell twitch-player-shell hidden"><iframe id="twitchPlayer" class="twitch-player" title="Reproductor de Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+  <button id="activateAudioBtn" class="audio-unlock hidden" type="button">▶ Activar reproducción</button>
+</div>
       </section>
 
       <section class="home-panel" id="homePanel">
@@ -99,10 +103,18 @@
         <section class="youtube-search-card" id="searchSection">
           <div class="media-tabs"><button id="youtubeTab" class="active" type="button"><span class="tab-icon youtube-tab-icon">▶</span>YouTube</button><button id="twitchTab" type="button"><span class="tab-icon twitch-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 2h17v12l-5 5h-4l-3 3v-3H4V2zm2 2v13h5v2l2-2h3l3-3V4H6zm4 3h2v6h-2V7zm5 0h2v6h-2V7z"/></svg></span>Twitch</button></div>
           <div class="card-title"><span id="providerIcon" class="provider-icon youtube-provider" aria-hidden="true">▶</span><div><h2 id="providerTitle">Buscar música en YouTube</h2><p id="providerSubtitle">Busca y agrega otra canción sin detener la que está sonando.</p></div></div>
-          <div class="search-clone"><input id="searchMirror" placeholder="Buscar canción, canal o pegar enlace..."><button id="searchMirrorBtn" type="button">Buscar</button></div>
-          <div id="searchStatus" class="search-status">Busca una canción para comenzar.</div>
-          <div id="searchResults" class="search-results"></div>
-          <details class="manual-link"><summary id="manualLinkSummary">Agregar con enlace de YouTube</summary><form id="videoForm"><input id="youtubeUrl" placeholder="Pega un enlace de YouTube"><button type="submit">Agregar a cola</button></form><p id="manualLinkHint" class="manual-link-hint">Solo se aceptan enlaces de YouTube en esta pestaña.</p></details>
+          <section id="youtubeSearchPanel" class="provider-search-panel">
+            <div class="search-clone"><input id="searchMirror" placeholder="Buscar canción o pegar enlace de YouTube..."><button id="searchMirrorBtn" type="button">Buscar</button></div>
+            <div id="searchStatus" class="search-status">Busca una canción para comenzar.</div>
+            <div id="searchResults" class="search-results"></div>
+            <details class="manual-link"><summary>Agregar con enlace de YouTube</summary><form id="videoForm"><input id="youtubeUrl" placeholder="Pega un enlace de YouTube"><button type="submit">Agregar a cola de YouTube</button></form><p class="manual-link-hint">Solo se aceptan enlaces de YouTube.</p></details>
+          </section>
+          <section id="twitchSearchPanel" class="provider-search-panel hidden">
+            <div class="search-clone"><input id="twitchSearchInput" placeholder="Buscar canal en directo o pegar enlace de Twitch..."><button id="twitchSearchBtn" type="button">Buscar</button></div>
+            <div id="twitchSearchStatus" class="search-status">Busca un canal que esté en directo.</div>
+            <div id="twitchSearchResults" class="search-results"></div>
+            <details class="manual-link"><summary>Reproducir con enlace de Twitch</summary><form id="twitchVideoForm"><input id="twitchUrl" placeholder="Pega un enlace de Twitch"><button type="submit">Reproducir directo</button></form><p class="manual-link-hint">Solo se aceptan enlaces de Twitch.</p></details>
+          </section>
         </section>
 
         <div class="popular"><h3>Búsquedas populares</h3><div><button data-query="Bad Bunny">Bad Bunny</button><button data-query="Mora">Mora</button><button data-query="Peso Pluma">Peso Pluma</button><button data-query="The Weeknd">The Weeknd</button><button data-query="Feid">Feid</button><button data-query="Karol G">Karol G</button></div></div>

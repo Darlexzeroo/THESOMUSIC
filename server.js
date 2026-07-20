@@ -455,11 +455,14 @@ io.on("connection", socket => {
       return callback?.({ ok: false, error: "Solo el anfitrión puede cambiar el video." });
     }
 
+    const provider = video.provider === "twitch" ? "twitch" : "youtube";
     room.video = {
+      provider,
       id: String(video.id),
-      title: String(video.title || "Video de YouTube").slice(0, 120),
-      channel: String(video.channel || "YouTube").slice(0, 80),
-      thumbnail: String(video.thumbnail || `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`).slice(0, 500)
+      title: String(video.title || (provider === "twitch" ? "Directo de Twitch" : "Video de YouTube")).slice(0, 120),
+      channel: String(video.channel || (provider === "twitch" ? video.id : "YouTube")).slice(0, 80),
+      thumbnail: String(video.thumbnail || (provider === "twitch" ? "" : `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`)).slice(0, 500),
+      live: provider === "twitch"
     };
     room.playing = true;
     room.waitingForQueue = false;
@@ -530,11 +533,14 @@ io.on("connection", socket => {
 
     if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
 
+    const provider = video.provider === "twitch" ? "twitch" : "youtube";
     const item = {
+      provider,
       id: String(video.id),
-      title: String(video.title || "Video de YouTube").slice(0, 120),
-      channel: String(video.channel || "YouTube").slice(0, 80),
-      thumbnail: String(video.thumbnail || `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`).slice(0, 500),
+      title: String(video.title || (provider === "twitch" ? "Directo de Twitch" : "Video de YouTube")).slice(0, 120),
+      channel: String(video.channel || (provider === "twitch" ? video.id : "YouTube")).slice(0, 80),
+      thumbnail: String(video.thumbnail || (provider === "twitch" ? "" : `https://i.ytimg.com/vi/${String(video.id)}/hqdefault.jpg`)).slice(0, 500),
+      live: provider === "twitch",
       addedBy: room.users.get(socket.id)?.name || "Invitado"
     };
 

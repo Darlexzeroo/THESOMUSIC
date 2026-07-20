@@ -765,11 +765,12 @@ function parseTwitchChannel(value) {
 
 function showTwitchChannel(channel, autoplay = true) {
   const frame = $("twitchPlayer");
-  const yt = $("youtubePlayer");
+  const twitchShell = $("twitchPlayerShell");
+  const youtubeShell = $("youtubePlayerShell");
   if (!frame || !channel) return;
 
-  yt.classList.add("hidden");
-  frame.classList.remove("hidden");
+  youtubeShell?.classList.add("hidden");
+  twitchShell?.classList.remove("hidden");
 
   // Twitch exige que parent sea únicamente el dominio, sin https:// ni rutas.
   // En Render será thesomusic.onrender.com y en local será localhost.
@@ -799,10 +800,10 @@ function showTwitchChannel(channel, autoplay = true) {
 }
 
 function showYouTubePlayer() {
-  $("twitchPlayer")?.classList.add("hidden");
   const frame = $("twitchPlayer");
   if (frame) frame.src = "about:blank";
-  $("youtubePlayer")?.classList.remove("hidden");
+  $("twitchPlayerShell")?.classList.add("hidden");
+  $("youtubePlayerShell")?.classList.remove("hidden");
 }
 
 function waitForPlayer(timeout = 10000) {
@@ -1788,8 +1789,8 @@ async function searchYouTube(query) {
 }
 
 async function searchTwitch(query) {
-  const status = $("searchStatus");
-  const resultsContainer = $("searchResults");
+  const status = $("twitchSearchStatus");
+  const resultsContainer = $("twitchSearchResults");
   status.textContent = "Buscando canales en directo en Twitch...";
   resultsContainer.innerHTML = "";
   try {
@@ -1865,49 +1866,33 @@ async function addYouTubeLinkDirectlyToQueue(value, optionalTitle = "") {
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   const query = $("searchInput").value.trim();
-  $("searchMirror").value = query;
-
-  if (!query) {
-    return notify(searchProvider === "twitch" ? "Escribe el nombre de un canal de Twitch." : "Escribe una canción o pega un enlace de YouTube.");
-  }
-
-  const isTwitchUrl = /(?:^|\.)twitch\.tv/i.test((() => { try { return new URL(query).hostname; } catch { return ""; } })());
-  const isYouTubeUrl = Boolean(parseYouTubeId(query));
+  if (!query) return notify(searchProvider === "twitch" ? "Escribe un canal de Twitch." : "Escribe una canción o enlace de YouTube.");
 
   if (searchProvider === "twitch") {
-    if (isYouTubeUrl) {
-      $("searchStatus").textContent = "Ese enlace es de YouTube. Cambia a la pestaña YouTube.";
-      return notify("Ese enlace pertenece a YouTube.");
-    }
-    if (isTwitchUrl) {
-      const video = videoFromTwitchLink(query);
-      if (!video) return notify("El enlace de Twitch no es válido.");
+    $("twitchSearchInput").value = query;
+    const video = videoFromTwitchLink(query);
+    if (video && /twitch\.tv/i.test(query)) {
       await startSelectedVideo(video);
-      $("searchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
-      $("searchResults").innerHTML = "";
-      $("searchInput").value = "";
-      $("searchMirror").value = "";
-      return;
+      $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+      $("twitchSearchResults").innerHTML = "";
+    } else {
+      await searchTwitch(query);
     }
-    await searchTwitch(query);
     return;
   }
 
-  if (isTwitchUrl) {
-    $("searchStatus").textContent = "Ese enlace es de Twitch. Cambia a la pestaña Twitch.";
-    return notify("Ese enlace pertenece a Twitch.");
+  $("searchMirror").value = query;
+  if (/(?:^|\.)twitch\.tv/i.test((() => { try { return new URL(query).hostname; } catch { return ""; } })())) {
+    return notify("Ese enlace pertenece a Twitch. Usa la pestaña Twitch.");
   }
-  if (isYouTubeUrl) {
+  if (parseYouTubeId(query)) {
     const added = await addYouTubeLinkDirectlyToQueue(query);
     if (added) {
-      $("searchStatus").textContent = "Enlace de YouTube agregado directamente a la cola.";
+      $("searchStatus").textContent = "Enlace de YouTube agregado a su cola.";
       $("searchResults").innerHTML = "";
-      $("searchInput").value = "";
-      $("searchMirror").value = "";
     }
     return;
   }
-
   await searchYouTube(query);
 });
 
@@ -1924,27 +1909,23 @@ function selectedVideo() {
 $("videoForm").addEventListener("submit", async event => {
   event.preventDefault();
   const url = $("youtubeUrl").value.trim();
-  if (!url) return notify("Pega un enlace primero.");
-
-  const twitchVideo = videoFromTwitchLink(url);
-  const youtubeId = parseYouTubeId(url);
-
-  if (searchProvider === "twitch") {
-    if (youtubeId) return notify("Ese enlace es de YouTube. Usa la pestaña YouTube.");
-    if (!twitchVideo || !/twitch\.tv/i.test(url)) return notify("Pega un enlace válido de Twitch.");
-    await startSelectedVideo(twitchVideo);
-    $("youtubeUrl").value = "";
-    $("searchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
-    return;
-  }
-
-  if (twitchVideo && /twitch\.tv/i.test(url)) return notify("Ese enlace es de Twitch. Usa la pestaña Twitch.");
-  if (!youtubeId) return notify("Pega un enlace válido de YouTube.");
+  if (!url) return notify("Pega un enlace de YouTube primero.");
+  if (!parseYouTubeId(url)) return notify("Pega un enlace válido de YouTube.");
   const added = await addYouTubeLinkDirectlyToQueue(url);
   if (added) {
     $("youtubeUrl").value = "";
-    $("searchStatus").textContent = "Enlace de YouTube agregado directamente a la cola.";
+    $("searchStatus").textContent = "Enlace de YouTube agregado a su cola.";
   }
+});
+
+$("twitchVideoForm")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const url = $("twitchUrl").value.trim();
+  const video = videoFromTwitchLink(url);
+  if (!video || !/twitch\.tv/i.test(url)) return notify("Pega un enlace válido de Twitch.");
+  await startSelectedVideo(video);
+  $("twitchUrl").value = "";
+  $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
 });
 
 function updatePlayButtonState(playing) {
@@ -2507,6 +2488,28 @@ $("searchMirror").addEventListener("keydown", event => {
   }
 });
 
+$("twitchSearchBtn")?.addEventListener("click", async () => {
+  const query = $("twitchSearchInput").value.trim();
+  if (!query) return notify("Escribe el nombre de un canal de Twitch.");
+  $("searchInput").value = query;
+  const video = videoFromTwitchLink(query);
+  if (video && /twitch\.tv/i.test(query)) {
+    await startSelectedVideo(video);
+    $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+    $("twitchSearchResults").innerHTML = "";
+  } else {
+    await searchTwitch(query);
+  }
+});
+$("twitchSearchInput")?.addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    $("twitchSearchBtn").click();
+  }
+});
+
+setSearchProvider(localStorage.getItem("theso-active-provider") || "youtube");
+
 document.querySelectorAll("[data-query]").forEach(button => {
   button.addEventListener("click", () => {
     $("searchInput").value = button.dataset.query;
@@ -2816,10 +2819,12 @@ $("voiceJoinBtn").disabled = true;
 
 
 function setSearchProvider(provider) {
-  searchProvider = provider;
-  const twitch = provider === "twitch";
+  searchProvider = provider === "twitch" ? "twitch" : "youtube";
+  const twitch = searchProvider === "twitch";
   $("youtubeTab")?.classList.toggle("active", !twitch);
   $("twitchTab")?.classList.toggle("active", twitch);
+  $("youtubeSearchPanel")?.classList.toggle("hidden", twitch);
+  $("twitchSearchPanel")?.classList.toggle("hidden", !twitch);
 
   const providerIcon = $("providerIcon");
   if (providerIcon) {
@@ -2830,15 +2835,14 @@ function setSearchProvider(provider) {
   }
 
   $("providerTitle").textContent = twitch ? "Buscar directos en Twitch" : "Buscar música en YouTube";
-  $("providerSubtitle").textContent = twitch ? "Encuentra canales en vivo y reprodúcelos sin mezclar enlaces de YouTube." : "Busca canciones o agrega enlaces exclusivos de YouTube.";
-  $("searchMirror").placeholder = twitch ? "Buscar canal en directo o pegar enlace de Twitch..." : "Buscar canción o pegar enlace de YouTube...";
-  $("searchInput").placeholder = twitch ? "Buscar canal en Twitch o pegar enlace de Twitch..." : "Buscar canción, canal o pegar enlace de YouTube...";
-  $("searchStatus").textContent = twitch ? "Busca un canal que esté en directo." : "Busca una canción para comenzar.";
-  $("manualLinkSummary").textContent = twitch ? "Agregar con enlace de Twitch" : "Agregar con enlace de YouTube";
-  $("youtubeUrl").placeholder = twitch ? "Pega un enlace de Twitch" : "Pega un enlace de YouTube";
-  $("manualLinkHint").textContent = twitch ? "Solo se aceptan enlaces de Twitch en esta pestaña." : "Solo se aceptan enlaces de YouTube en esta pestaña.";
-  $("searchResults").innerHTML = "";
-  $("youtubeUrl").value = "";
+  $("providerSubtitle").textContent = twitch
+    ? "Twitch tiene su propio buscador, resultados y reproductor."
+    : "YouTube tiene su propio buscador, resultados y reproductor.";
+  $("searchInput").placeholder = twitch
+    ? "Buscar canal en Twitch o pegar enlace de Twitch..."
+    : "Buscar canción o pegar enlace de YouTube...";
+  $("searchInput").value = twitch ? ($("twitchSearchInput")?.value || "") : ($("searchMirror")?.value || "");
+  localStorage.setItem("theso-active-provider", searchProvider);
 }
 $("youtubeTab")?.addEventListener("click",()=>setSearchProvider("youtube"));
 $("twitchTab")?.addEventListener("click",()=>setSearchProvider("twitch"));
