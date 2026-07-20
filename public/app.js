@@ -848,18 +848,25 @@ function showTwitchChannel(channel, autoplay = true) {
   }
 }
 
-function showYouTubePlayer() {
+async function showYouTubePlayer() {
   // Descargar el iframe de Twitch detiene completamente el directo antes de
   // iniciar el siguiente elemento de YouTube de la cola.
   const frame = $("twitchPlayer");
   if (frame) frame.src = "about:blank";
   twitchPausedChannel = "";
   $("twitchPlayerShell")?.classList.add("hidden");
-  $("youtubePlayerShell")?.classList.remove("hidden");
 
-  try {
-    if (playerReady && player) player.unMute();
-  } catch (_error) {}
+  const youtubeShell = $("youtubePlayerShell");
+  youtubeShell?.classList.remove("hidden");
+  if (youtubeShell) {
+    youtubeShell.style.display = "";
+    youtubeShell.style.visibility = "visible";
+    youtubeShell.style.opacity = "1";
+  }
+
+  // Esperar un par de frames evita que YouTube intente cargar mientras su
+  // contenedor todavía está oculto después de abandonar Twitch.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 function waitForPlayer(timeout = 10000) {
@@ -887,26 +894,43 @@ function hideActivationButton() {
   $("activateAudioBtn").classList.add("hidden");
 }
 
-async function playCurrentVideo() {
+async function playCurrentVideo({ allowMutedFallback = true } = {}) {
   await waitForPlayer();
 
-  try {
-    player.playVideo();
+  const tryPlay = async () => {
+    try {
+      player.playVideo();
+    } catch (_error) {}
+    await new Promise(resolve => setTimeout(resolve, 650));
+    return player.getPlayerState() === YT.PlayerState.PLAYING;
+  };
 
-    // YouTube does not throw when autoplay is blocked, so verify state shortly after.
-    setTimeout(() => {
-      if (
-        currentVideo &&
-        player.getPlayerState() !== YT.PlayerState.PLAYING
-      ) {
-        showActivationButton();
-      } else {
-        hideActivationButton();
-      }
-    }, 700);
-  } catch {
+  // Primer intento: conservar audio cuando el navegador ya autorizó la reproducción.
+  let started = await tryPlay();
+
+  // Los navegadores pueden bloquear autoplay con sonido para los oyentes. En ese
+  // caso se inicia silenciado para que el video no quede negro ni detenido.
+  if (!started && allowMutedFallback) {
+    try { player.mute(); } catch (_error) {}
+    started = await tryPlay();
+  }
+
+  // Si el usuario ya activó audio antes en esta pestaña, restaurarlo automáticamente.
+  const playbackWasActivated = userActivatedPlayback ||
+    sessionStorage.getItem("waveroom-playback-activated") === "1";
+  if (started && playbackWasActivated) {
+    try { player.unMute(); } catch (_error) {}
+  }
+
+  if (started) {
+    hideActivationButton();
+    document.body.classList.add("is-playing");
+    updatePlayButtonState(true);
+  } else {
     showActivationButton();
   }
+
+  return started;
 }
 
 async function applyRoomPlayback(video, time = 0, playing = true) {
@@ -922,7 +946,7 @@ async function applyRoomPlayback(video, time = 0, playing = true) {
     pendingRoomPlayback = null;
     return;
   }
-  showYouTubePlayer();
+  await showYouTubePlayer();
   await waitForPlayer();
 
   remoteAction = true;
@@ -1033,7 +1057,7 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
     updatePlayButtonState(autoplay);
     return;
   }
-  showYouTubePlayer();
+  await showYouTubePlayer();
   await waitForPlayer();
 
   if (autoplay) {
