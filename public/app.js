@@ -1114,8 +1114,44 @@ function renderRoom(room) {
   startSync();
 }
 
+function clearPlaybackAfterLeavingRoom() {
+  // Al salir de una sala se detienen y descargan ambos reproductores para que
+  // no continúe sonando ningún video o directo perteneciente a esa sala.
+  const previousRemoteAction = remoteAction;
+  remoteAction = true;
+
+  const twitchFrame = $("twitchPlayer");
+  if (twitchFrame) twitchFrame.src = "about:blank";
+  twitchPausedChannel = "";
+  $("twitchPlayerShell")?.classList.add("hidden");
+  $("youtubePlayerShell")?.classList.remove("hidden");
+
+  try {
+    if (playerReady && player) {
+      player.stopVideo();
+      player.mute();
+    }
+  } catch (_error) {}
+
+  currentVideo = null;
+  pendingRoomPlayback = null;
+  hideActivationButton();
+  updateTrackUI(null);
+  updatePlayButtonState(false);
+  document.body.classList.remove("is-playing");
+
+  if ($("currentTime")) $("currentTime").textContent = "0:00";
+  if ($("durationTime")) $("durationTime").textContent = "0:00";
+  if ($("progressBar")) $("progressBar").value = 0;
+
+  setTimeout(() => {
+    remoteAction = previousRemoteAction;
+  }, 350);
+}
+
 function resetRoomUI() {
   leaveVoiceChat(false);
+  clearPlaybackAfterLeavingRoom();
   currentRoom = null;
   $("roomEntry").classList.remove("hidden");
   $("roomPanel").classList.add("hidden");
@@ -1946,9 +1982,9 @@ $("searchForm").addEventListener("submit", async event => {
     $("twitchSearchInput").value = query;
     const video = videoFromTwitchLink(query);
     if (video && /twitch\.tv/i.test(query)) {
-      await startSelectedVideo(video);
+      addVideoToQueue(video);
       clearTwitchLinkFields();
-      $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+      $("twitchSearchStatus").textContent = "Directo de Twitch agregado a la cola.";
       $("twitchSearchResults").innerHTML = "";
     } else {
       await searchTwitch(query);
@@ -1999,9 +2035,9 @@ $("twitchVideoForm")?.addEventListener("submit", async event => {
   const url = $("twitchUrl").value.trim();
   const video = videoFromTwitchLink(url);
   if (!video || !/twitch\.tv/i.test(url)) return notify("Pega un enlace válido de Twitch.");
-  await startSelectedVideo(video);
+  addVideoToQueue(video);
   clearTwitchLinkFields();
-  $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+  $("twitchSearchStatus").textContent = "Directo de Twitch agregado a la cola.";
 });
 
 function updatePlayButtonState(playing) {
@@ -2577,9 +2613,9 @@ $("twitchSearchBtn")?.addEventListener("click", async () => {
   $("searchInput").value = query;
   const video = videoFromTwitchLink(query);
   if (video && /twitch\.tv/i.test(query)) {
-    await startSelectedVideo(video);
+    addVideoToQueue(video);
     clearTwitchLinkFields();
-    $("twitchSearchStatus").textContent = "Directo de Twitch reproduciéndose ahora.";
+    $("twitchSearchStatus").textContent = "Directo de Twitch agregado a la cola.";
     $("twitchSearchResults").innerHTML = "";
   } else {
     await searchTwitch(query);

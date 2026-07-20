@@ -1830,6 +1830,10 @@ body.friends-open #friendsModal{pointer-events:auto;user-select:auto}
   body.sidebar-collapsed .room-tile>span{font-size:22px!important}
   body.sidebar-collapsed .room-tile>div,
   body.sidebar-collapsed .room-tile>em,
+  body.sidebar-collapsed .room-name-input,
+  body.sidebar-collapsed .room-create-row,
+  body.sidebar-collapsed .room-create-row select,
+  body.sidebar-collapsed .room-create-row button,
   body.sidebar-collapsed .gradient-btn,
   body.sidebar-collapsed .join-mini,
   body.sidebar-collapsed .room-actions,
