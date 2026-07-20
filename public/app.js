@@ -769,6 +769,21 @@ function showTwitchChannel(channel, autoplay = true) {
   const youtubeShell = $("youtubePlayerShell");
   if (!frame || !channel) return;
 
+  // Solo puede sonar un elemento de la cola a la vez. Al cambiar de YouTube
+  // a Twitch, se pausa primero el reproductor de YouTube aunque quede oculto.
+  // remoteAction evita que esta pausa técnica se envíe como una acción manual.
+  if (playerReady && player) {
+    const previousRemoteAction = remoteAction;
+    remoteAction = true;
+    try {
+      player.pauseVideo();
+      player.mute();
+    } catch (_error) {}
+    setTimeout(() => {
+      remoteAction = previousRemoteAction;
+    }, 400);
+  }
+
   youtubeShell?.classList.add("hidden");
   twitchShell?.classList.remove("hidden");
 
@@ -800,10 +815,17 @@ function showTwitchChannel(channel, autoplay = true) {
 }
 
 function showYouTubePlayer() {
+  // Descargar el iframe de Twitch detiene completamente el directo antes de
+  // iniciar el siguiente elemento de YouTube de la cola.
   const frame = $("twitchPlayer");
   if (frame) frame.src = "about:blank";
+  twitchPausedChannel = "";
   $("twitchPlayerShell")?.classList.add("hidden");
   $("youtubePlayerShell")?.classList.remove("hidden");
+
+  try {
+    if (playerReady && player) player.unMute();
+  } catch (_error) {}
 }
 
 function waitForPlayer(timeout = 10000) {
@@ -2290,10 +2312,22 @@ socket.on("video-changed", async ({ video, playing, time }) => {
 });
 
 socket.on("queue-ended", () => {
-  if (!playerReady) return;
-
   remoteAction = true;
   hideActivationButton();
+
+  // La cola terminó: detener tanto YouTube como Twitch para que ningún
+  // reproductor oculto continúe sonando.
+  const twitchFrame = $("twitchPlayer");
+  if (twitchFrame) twitchFrame.src = "about:blank";
+  $("twitchPlayerShell")?.classList.add("hidden");
+
+  if (!playerReady) {
+    currentVideo = null;
+    document.body.classList.remove("is-playing");
+    updatePlayButtonState(false);
+    setTimeout(() => { remoteAction = false; }, 350);
+    return;
+  }
 
   // stopVideo cancela cualquier repetición residual de los últimos segundos
   // que algunos navegadores producen al recibir nuevas sincronizaciones.
