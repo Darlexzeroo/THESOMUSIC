@@ -52,3 +52,10 @@ SESSION_SECRET=UNA_CLAVE_LARGA_Y_ALEATORIA
 ```
 
 El secreto de Discord y `SESSION_SECRET` nunca deben escribirse en `public/app.js`, `public/index.html` ni subirse a GitHub.
+
+## V75 - Pantalla de acceso
+- Pantalla inicial con acceso mediante Discord o como invitado.
+- Los invitados deben elegir un nombre antes de entrar.
+- Perfiles locales de invitado separados del perfil de Discord.
+- Discord usa siempre el nombre y avatar recibidos de la cuenta, sin mezclar la foto local anterior.
+- Cerrar sesión vuelve a mostrar la pantalla de acceso.

@@ -2367,6 +2367,7 @@ $("profileForm").addEventListener("submit", event => {
     else localStorage.removeItem("waveroom-photo");
     if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
     else localStorage.removeItem("waveroom-banner");
+    if (activeLoginMode === "guest") saveGuestProfile();
   } catch {
     return notify("No se pudo guardar: reduce el peso del GIF o del banner.");
   }
@@ -3010,52 +3011,158 @@ function setSearchProvider(provider) {
 $("youtubeTab")?.addEventListener("click",()=>setSearchProvider("youtube"));
 $("twitchTab")?.addEventListener("click",()=>setSearchProvider("twitch"));
 
-/* V74 · Inicio de sesión con Discord */
+/* V75 · Pantalla de acceso: Discord o invitado */
 let discordAuthenticatedUser = null;
+let activeLoginMode = null;
 
-async function loadDiscordSession() {
+const LOGIN_MODE_KEY = "theso-login-mode";
+const GUEST_NAME_KEY = "theso-guest-name";
+const GUEST_PHOTO_KEY = "theso-guest-photo";
+const GUEST_BANNER_KEY = "theso-guest-banner";
+
+function setLoginGateVisible(visible, message = "") {
+  const gate = $("loginGate");
+  if (!gate) return;
+  gate.classList.toggle("hidden", !visible);
+  document.body.classList.toggle("auth-gated", visible);
+  const status = $("loginGateStatus");
+  if (status) {
+    status.textContent = message;
+    status.classList.remove("error");
+  }
+}
+
+function setLoginGateError(message) {
+  const status = $("loginGateStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.add("error");
+}
+
+function saveGuestProfile() {
+  try {
+    localStorage.setItem(GUEST_NAME_KEY, getName());
+    if (profilePhotoData) localStorage.setItem(GUEST_PHOTO_KEY, profilePhotoData);
+    else localStorage.removeItem(GUEST_PHOTO_KEY);
+    if (profileBannerData) localStorage.setItem(GUEST_BANNER_KEY, profileBannerData);
+    else localStorage.removeItem(GUEST_BANNER_KEY);
+  } catch {}
+}
+
+function applyGuestProfile(name) {
+  activeLoginMode = "guest";
+  discordAuthenticatedUser = null;
+  const guestName = String(name || localStorage.getItem(GUEST_NAME_KEY) || "Invitado").trim().slice(0, 30) || "Invitado";
+  username.value = guestName;
+  profilePhotoData = localStorage.getItem(GUEST_PHOTO_KEY) || "";
+  profileBannerData = localStorage.getItem(GUEST_BANNER_KEY) || "";
+  localStorage.setItem(LOGIN_MODE_KEY, "guest");
+  localStorage.setItem(GUEST_NAME_KEY, guestName);
+  localStorage.setItem("waveroom-name", guestName);
+  if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
+  else localStorage.removeItem("waveroom-photo");
+  if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
+  else localStorage.removeItem("waveroom-banner");
+  refreshProfileUI();
+  registerPersistentClient();
+  setLoginGateVisible(false);
+}
+
+function applyDiscordProfile(user) {
+  activeLoginMode = "discord";
+  discordAuthenticatedUser = user;
+  const displayName = user.displayName || user.username || "Usuario Discord";
+  username.value = displayName;
+  // El avatar de Discord siempre tiene prioridad y nunca se mezcla con la foto local del invitado.
+  profilePhotoData = user.avatar || "";
+  // El banner local del invitado no se aplica a una cuenta de Discord.
+  profileBannerData = "";
+  localStorage.setItem(LOGIN_MODE_KEY, "discord");
+  localStorage.setItem("waveroom-name", displayName);
+  if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
+  else localStorage.removeItem("waveroom-photo");
+  localStorage.removeItem("waveroom-banner");
+  refreshProfileUI();
+  registerPersistentClient();
+  if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
+  setLoginGateVisible(false);
+}
+
+function updateDiscordCard() {
   const card = $("discordLoginCard");
   const loginButton = $("discordLoginButton");
   const logoutButton = $("discordLogoutButton");
   const title = $("discordLoginTitle");
   const status = $("discordLoginStatus");
   if (!card || !loginButton || !logoutButton) return;
+  const connected = Boolean(discordAuthenticatedUser);
+  card.classList.toggle("is-connected", connected);
+  loginButton.classList.toggle("hidden", connected);
+  logoutButton.classList.toggle("hidden", !connected);
+  if (connected) {
+    title.textContent = discordAuthenticatedUser.displayName || discordAuthenticatedUser.username || "Discord";
+    status.textContent = `Conectado como @${discordAuthenticatedUser.username || "discord"}`;
+  } else {
+    title.textContent = "Cuenta de Discord";
+    status.textContent = activeLoginMode === "guest"
+      ? "Estás usando THESO como invitado. Puedes conectar Discord cuando quieras."
+      : "Inicia sesión para usar automáticamente tu nombre y avatar.";
+  }
+}
 
+async function loadDiscordSession() {
+  setLoginGateVisible(true, "Comprobando sesión…");
   try {
     const response = await fetch("/api/auth/me", { credentials: "same-origin" });
     const data = await response.json();
-    discordAuthenticatedUser = data.authenticated ? data.user : null;
-
-    card.classList.toggle("is-connected", Boolean(discordAuthenticatedUser));
-    loginButton.classList.toggle("hidden", Boolean(discordAuthenticatedUser));
-    logoutButton.classList.toggle("hidden", !discordAuthenticatedUser);
-
-    if (discordAuthenticatedUser) {
-      title.textContent = discordAuthenticatedUser.displayName || discordAuthenticatedUser.username || "Discord";
-      status.textContent = `Conectado como @${discordAuthenticatedUser.username || "discord"}`;
-      username.value = discordAuthenticatedUser.displayName || discordAuthenticatedUser.username || getName();
-      profilePhotoData = discordAuthenticatedUser.avatar || profilePhotoData;
-      localStorage.setItem("waveroom-name", username.value);
-      if (profilePhotoData) localStorage.setItem("waveroom-photo", profilePhotoData);
-      refreshProfileUI();
-      registerPersistentClient();
-      if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
+    if (data.authenticated && data.user) {
+      applyDiscordProfile(data.user);
+    } else if (localStorage.getItem(LOGIN_MODE_KEY) === "guest" && localStorage.getItem(GUEST_NAME_KEY)) {
+      applyGuestProfile();
     } else {
-      title.textContent = "Cuenta de Discord";
-      status.textContent = "Inicia sesión para usar automáticamente tu nombre y avatar.";
+      activeLoginMode = null;
+      setLoginGateVisible(true, "Elige una opción para entrar.");
     }
+    updateDiscordCard();
   } catch (error) {
     console.warn("No se pudo comprobar la sesión de Discord:", error);
-    status.textContent = "No se pudo conectar con Discord en este momento.";
+    if (localStorage.getItem(LOGIN_MODE_KEY) === "guest" && localStorage.getItem(GUEST_NAME_KEY)) {
+      applyGuestProfile();
+    } else {
+      setLoginGateVisible(true, "No se pudo comprobar Discord. Puedes entrar como invitado.");
+    }
+    updateDiscordCard();
   }
 }
+
+$("showGuestLogin")?.addEventListener("click", () => {
+  $("guestLoginForm")?.classList.remove("hidden");
+  const input = $("guestLoginName");
+  if (input) {
+    input.value = localStorage.getItem(GUEST_NAME_KEY) || "";
+    setTimeout(() => input.focus(), 20);
+  }
+});
+
+$("guestLoginForm")?.addEventListener("submit", event => {
+  event.preventDefault();
+  const name = $("guestLoginName")?.value.trim();
+  if (!name) return setLoginGateError("Escribe un nombre para continuar como invitado.");
+  applyGuestProfile(name);
+  updateDiscordCard();
+  notify(`Bienvenido, ${name}.`);
+});
 
 $("discordLogoutButton")?.addEventListener("click", async () => {
   try {
     await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
     discordAuthenticatedUser = null;
+    activeLoginMode = null;
+    localStorage.removeItem(LOGIN_MODE_KEY);
+    updateDiscordCard();
+    closeProfileModal();
+    setLoginGateVisible(true, "Sesión cerrada. Elige cómo quieres entrar.");
     notify("Sesión de Discord cerrada.");
-    await loadDiscordSession();
   } catch {
     notify("No se pudo cerrar la sesión de Discord.");
   }
@@ -3072,3 +3179,4 @@ $("discordLogoutButton")?.addEventListener("click", async () => {
   }
   loadDiscordSession();
 })();
+

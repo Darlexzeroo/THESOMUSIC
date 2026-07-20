@@ -3246,3 +3246,52 @@ body.modal-open .modal{
 
 /* V74 · Inicio de sesión con Discord */
 .discord-login-card{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px;border:1px solid color-mix(in srgb,#5865f2 55%,var(--border,#202735));border-radius:14px;background:linear-gradient(135deg,rgba(88,101,242,.18),rgba(10,15,26,.92));margin:14px 0}.discord-login-icon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:#5865f2;color:white;font-size:22px;font-weight:900}.discord-login-copy{display:flex;flex-direction:column;min-width:0}.discord-login-copy strong{font-size:14px}.discord-login-copy small{margin-top:4px;color:#aeb7ca;line-height:1.35}.discord-login-button,.discord-logout-button{border:0;border-radius:10px;padding:10px 13px;font:inherit;font-weight:800;text-decoration:none;white-space:nowrap;cursor:pointer}.discord-login-button{background:#5865f2;color:#fff}.discord-login-button:hover{filter:brightness(1.1)}.discord-logout-button{background:#252b38;color:#fff}.discord-login-card.is-connected{border-color:#57f287;background:linear-gradient(135deg,rgba(87,242,135,.13),rgba(10,15,26,.92))}.discord-login-card.is-connected .discord-login-icon{background:#57f287;color:#07120b}@media(max-width:650px){.discord-login-card{grid-template-columns:44px 1fr}.discord-login-button,.discord-logout-button{grid-column:1/-1;width:100%;text-align:center}}
+
+/* V75 · Pantalla de acceso Discord / Invitado */
+body.auth-gated { overflow: hidden; }
+.login-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--accent, #08e6ef) 22%, transparent), transparent 34%),
+    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--purple, #8b5cf6) 24%, transparent), transparent 38%),
+    rgba(3, 5, 14, .97);
+  backdrop-filter: blur(18px);
+}
+.login-gate.hidden { display: none !important; }
+.login-gate-card {
+  width: min(500px, 100%);
+  padding: 38px;
+  border: 1px solid var(--border, #273044);
+  border-radius: 28px;
+  background: linear-gradient(145deg, rgba(14,19,32,.98), rgba(8,10,22,.98));
+  box-shadow: 0 32px 100px rgba(0,0,0,.55);
+  text-align: center;
+}
+.login-gate-brand { display:flex; justify-content:center; align-items:center; gap:10px; font-size:25px; letter-spacing:.08em; }
+.login-gate-brand span, .login-gate-kicker { color: var(--accent, #08e6ef); }
+.login-gate-kicker { margin:22px 0 8px; font-size:11px; font-weight:800; letter-spacing:.18em; }
+.login-gate-card h1 { margin:0; font-size:clamp(28px, 5vw, 42px); }
+.login-gate-subtitle { margin:14px auto 26px; max-width:410px; color:var(--muted, #9aa3b6); line-height:1.55; }
+.login-discord-primary, .login-guest-secondary {
+  width:100%; min-height:54px; border-radius:15px; display:flex; align-items:center; justify-content:center; gap:11px;
+  font-weight:800; font-size:15px; text-decoration:none; cursor:pointer;
+}
+.login-discord-primary { background:#5865f2; color:#fff; border:1px solid #7289ff; box-shadow:0 14px 34px rgba(88,101,242,.25); }
+.login-discord-primary:hover { filter:brightness(1.08); transform:translateY(-1px); }
+.discord-mark { width:27px; height:27px; border-radius:9px; display:grid; place-items:center; background:rgba(255,255,255,.16); }
+.login-divider { display:flex; align-items:center; gap:12px; margin:17px 0; color:var(--muted, #9aa3b6); }
+.login-divider::before,.login-divider::after { content:""; height:1px; flex:1; background:var(--border, #273044); }
+.login-guest-secondary { border:1px solid var(--border, #273044); color:var(--text, #f5f7fb); background:rgba(255,255,255,.035); }
+.guest-login-form { margin-top:18px; padding-top:18px; border-top:1px solid var(--border, #273044); text-align:left; }
+.guest-login-form label { display:block; margin-bottom:8px; font-weight:700; }
+.guest-login-row { display:grid; grid-template-columns:1fr auto; gap:10px; }
+.guest-login-row input { min-width:0; height:48px; border-radius:12px; border:1px solid var(--border,#273044); background:rgba(0,0,0,.22); color:var(--text,#fff); padding:0 14px; }
+.guest-login-row button { border:0; border-radius:12px; padding:0 20px; background:var(--accent,#08e6ef); color:#001014; font-weight:900; cursor:pointer; }
+.guest-login-form small, .login-gate-status { display:block; margin-top:10px; color:var(--muted,#9aa3b6); font-size:12px; }
+.login-gate-status.error { color:#ff7b88; }
+@media (max-width:560px){ .login-gate-card{padding:28px 20px;border-radius:22px}.guest-login-row{grid-template-columns:1fr}.guest-login-row button{height:46px} }
