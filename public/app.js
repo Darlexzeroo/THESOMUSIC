@@ -804,18 +804,21 @@ function showTwitchChannel(channel, autoplay = true) {
   if (!frame || !channel) return;
 
   // Solo puede sonar un elemento de la cola a la vez. Al cambiar de YouTube
-  // a Twitch, se pausa primero el reproductor de YouTube aunque quede oculto.
-  // remoteAction evita que esta pausa técnica se envíe como una acción manual.
+  // a Twitch, se detiene por completo el video anterior; pausarlo no basta,
+  // porque algunos navegadores continúan reproduciendo el audio del iframe oculto.
+  // remoteAction evita que esta detención técnica se envíe como una acción manual.
   if (playerReady && player) {
     const previousRemoteAction = remoteAction;
     remoteAction = true;
     try {
-      player.pauseVideo();
       player.mute();
+      player.stopVideo();
+      player.seekTo(0, false);
+      player.clearVideo();
     } catch (_error) {}
     setTimeout(() => {
       remoteAction = previousRemoteAction;
-    }, 400);
+    }, 500);
   }
 
   youtubeShell?.classList.add("hidden");
