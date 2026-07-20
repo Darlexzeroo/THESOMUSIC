@@ -11,6 +11,7 @@ let pendingRoomPlayback = null;
 let userActivatedPlayback = sessionStorage.getItem("waveroom-playback-activated") === "1";
 let searchProvider = "youtube";
 let twitchPausedChannel = "";
+let playbackRequestVersion = 0;
 
 const $ = id => document.getElementById(id);
 const username = $("username");
@@ -798,6 +799,9 @@ function parseTwitchChannel(value) {
 }
 
 function showTwitchChannel(channel, autoplay = true) {
+  // Invalida cualquier carga asincrónica anterior de YouTube. Sin este token,
+  // una petición vieja podía terminar después y volver a reproducir audio oculto.
+  playbackRequestVersion += 1;
   const frame = $("twitchPlayer");
   const twitchShell = $("twitchPlayerShell");
   const youtubeShell = $("youtubePlayerShell");
@@ -939,6 +943,7 @@ async function playCurrentVideo({ allowMutedFallback = true } = {}) {
 async function applyRoomPlayback(video, time = 0, playing = true) {
   if (!video) return;
 
+  const requestVersion = ++playbackRequestVersion;
   pendingRoomPlayback = { video, time, playing };
   currentVideo = video;
   updateTrackUI(video);
@@ -951,6 +956,7 @@ async function applyRoomPlayback(video, time = 0, playing = true) {
   }
   await showYouTubePlayer();
   await waitForPlayer();
+  if (requestVersion !== playbackRequestVersion || currentVideo?.provider === "twitch") return;
 
   remoteAction = true;
   currentVideo = video;
@@ -962,6 +968,10 @@ async function applyRoomPlayback(video, time = 0, playing = true) {
       startSeconds: Math.max(0, Number(time) || 0)
     });
     await playCurrentVideo();
+    if (requestVersion !== playbackRequestVersion || currentVideo?.provider === "twitch") {
+      try { player.mute(); player.stopVideo(); player.clearVideo(); } catch (_error) {}
+      return;
+    }
   } else {
     player.cueVideoById({
       videoId: video.id,
@@ -1053,6 +1063,7 @@ window.onYouTubeIframeAPIReady = function () {
 
 async function loadVideo(video, autoplay = false, startSeconds = 0) {
   if (!video) return;
+  const requestVersion = ++playbackRequestVersion;
   currentVideo = video;
   updateTrackUI(video);
   if (video.provider === "twitch") {
@@ -1062,6 +1073,7 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
   }
   await showYouTubePlayer();
   await waitForPlayer();
+  if (requestVersion !== playbackRequestVersion || currentVideo?.provider === "twitch") return;
 
   if (autoplay) {
     player.loadVideoById({
@@ -1069,6 +1081,10 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
       startSeconds: Math.max(0, Number(startSeconds) || 0)
     });
     await playCurrentVideo();
+    if (requestVersion !== playbackRequestVersion || currentVideo?.provider === "twitch") {
+      try { player.mute(); player.stopVideo(); player.clearVideo(); } catch (_error) {}
+      return;
+    }
   } else {
     player.cueVideoById({
       videoId: video.id,
