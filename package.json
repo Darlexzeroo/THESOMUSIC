@@ -1,8 +1,8 @@
 {
   "name": "waveroom-youtube",
-  "version": "89.0.0",
+  "version": "91.0.0",
   "private": true,
-  "description": "THESO V89 con estados de usuario y chat privado avanzado",
+  "description": "THESO V91 con invitaciones privadas, roles de sala y votación para saltar",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -3457,3 +3457,6 @@ body.auth-pending .auth-boot-splash { display: grid; }
 .presence-twitch { color: #b48cff; }
 .presence-room { color: #a78bfa; }
 .presence-offline { color: #8b93a7; }
+
+/* V91: roles, invitaciones y votación */
+.room-role-tools{display:flex;gap:6px;align-items:center;margin-left:auto}.room-role-tools select{max-width:112px;background:rgba(255,255,255,.08);color:inherit;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px}.room-role-tools button,.queue-remove-btn{border:0;border-radius:8px;padding:6px 8px;cursor:pointer}.private-room-invite{display:grid;gap:8px;min-width:220px;padding:12px;border:1px solid rgba(124,92,255,.45);border-radius:14px;background:rgba(124,92,255,.12)}.private-room-invite small{opacity:.72}.private-room-invite button{justify-self:start;border:0;border-radius:9px;padding:8px 14px;font-weight:800;cursor:pointer}.vote-skip-btn{min-width:78px;font-size:12px}.vote-skip-btn.voted{outline:2px solid currentColor}.queue-item{position:relative}.queue-remove-btn{margin-left:auto;font-size:20px;background:rgba(255,80,80,.15);color:inherit}@media(max-width:700px){.room-role-tools{width:100%;margin-top:8px}.room-role-tools select{flex:1}.vote-skip-btn{min-width:62px;padding:8px 6px}}

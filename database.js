@@ -34,6 +34,8 @@ const messageSchema = new mongoose.Schema({
   receiverId: { type: String, required: true, index: true },
   text: { type: String, default: "", maxlength: 400 },
   image: { type: mongoose.Schema.Types.Mixed, default: null },
+  messageType: { type: String, enum: ["text", "room_invite"], default: "text" },
+  invite: { type: mongoose.Schema.Types.Mixed, default: null },
   replyTo: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
   reactions: { type: mongoose.Schema.Types.Mixed, default: {} },
   editedAt: { type: Date, default: null },
@@ -183,6 +185,8 @@ function serializeMessage(message, reply = null) {
     author: "",
     text: message.deletedAt ? "" : (message.text || ""),
     image: message.deletedAt ? null : (message.image || null),
+    messageType: message.messageType || "text",
+    invite: message.deletedAt ? null : (message.invite || null),
     replyTo: reply ? { id: String(reply._id), fromClientId: reply.senderId, text: reply.deletedAt ? "Mensaje eliminado" : (reply.text || (reply.image ? "Imagen" : "Mensaje")) } : null,
     reactions: message.reactions || {},
     editedAt: message.editedAt ? new Date(message.editedAt).getTime() : null,
@@ -218,6 +222,24 @@ async function saveMessage(senderId, receiverId, text, image, author, replyToId 
   }
   const saved = await Message.create({ conversationId: conversation._id, senderId, receiverId, text, image, replyTo: reply?._id || null });
   return { ...serializeMessage(saved.toObject(), reply), author };
+}
+
+async function saveRoomInvite(senderId, receiverId, author, invite = {}) {
+  if (!isMongoReady()) return null;
+  const key = pairKey(senderId, receiverId);
+  const conversation = await Conversation.findOneAndUpdate(
+    { pairKey: key },
+    { $set: { lastMessageAt: new Date() }, $setOnInsert: { members: [senderId, receiverId] } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+  const safeInvite = {
+    code: String(invite.code || "").trim().toUpperCase().slice(0, 12),
+    roomName: String(invite.roomName || "Sala").slice(0, 60),
+    visibility: invite.visibility === "private" ? "private" : "public"
+  };
+  const text = `${author || "Un amigo"} te invitó a “${safeInvite.roomName}”`;
+  const saved = await Message.create({ conversationId: conversation._id, senderId, receiverId, text, messageType: "room_invite", invite: safeInvite });
+  return { ...serializeMessage(saved.toObject()), author };
 }
 
 async function editMessage(identityId, messageId, text) {
@@ -282,6 +304,7 @@ module.exports = {
   getConversationContacts,
   getMessages,
   saveMessage,
+  saveRoomInvite,
   editMessage,
   deleteMessage,
   toggleReaction,

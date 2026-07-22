@@ -181,3 +181,11 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Al pausar, terminar o salir de la sala vuelve a `En una sala` o `En línea`.
 - Estados con iconos y colores en la lista de amigos.
 - Se eliminaron las confirmaciones visuales `Enviado` y `Leído`.
+
+
+## V91 - Invitaciones, roles y votación
+- Invitaciones persistentes dentro del chat privado con botón Unirse.
+- Roles: Anfitrión, Moderador, DJ, Oyente, Invitado y Silenciado.
+- Permisos por usuario para pausar, saltar, borrar cola, agregar Twitch y expulsar.
+- Votación para saltar con umbral del 60% de participantes elegibles.
+- Validaciones del lado del servidor para impedir saltarse permisos desde el navegador.

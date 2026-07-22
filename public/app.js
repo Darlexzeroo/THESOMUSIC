@@ -929,7 +929,8 @@ function renderPrivateMessages(messages = []) {
     lastDay = day;
     const reply = message.replyTo ? `<div class="private-reply-quote"><b>${message.replyTo.fromClientId === persistentClientId ? "Tú" : "Mensaje"}</b><span>${escapeHtml(message.replyTo.text || "Mensaje")}</span></div>` : "";
     const reactions = Object.entries(message.reactions || {}).map(([emoji, users]) => `<button type="button" class="private-reaction${(users || []).includes(persistentClientId) ? " mine" : ""}" data-react-message="${escapeHtml(message.id)}" data-react-emoji="${escapeHtml(emoji)}">${escapeHtml(emoji)} <b>${(users || []).length}</b></button>`).join("");
-    const body = message.deletedAt ? '<p class="private-message-deleted">Mensaje eliminado</p>' : `${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
+    const inviteCard = message.messageType === "room_invite" && message.invite ? `<div class="private-room-invite"><b>✉ ${escapeHtml(message.text || "Invitación a sala")}</b><small>${message.invite.visibility === "private" ? "Sala privada" : "Sala pública"}</small><button type="button" data-join-invite="${escapeHtml(message.invite.code || "")}">Unirse</button></div>` : "";
+    const body = message.deletedAt ? '<p class="private-message-deleted">Mensaje eliminado</p>' : `${inviteCard || (message.text ? `<p>${escapeHtml(message.text)}</p>` : "")}${imageMessageHtml(message.image)}`;
     const actions = message.deletedAt ? "" : `<div class="private-message-actions"><button type="button" data-reply-message="${escapeHtml(message.id)}" title="Responder">↩</button><button type="button" data-quick-react="${escapeHtml(message.id)}" title="Reaccionar">😊</button>${mine ? `<button type="button" data-edit-message="${escapeHtml(message.id)}" title="Editar">✎</button><button type="button" data-delete-message="${escapeHtml(message.id)}" title="Eliminar">🗑</button>` : ""}</div>`;
     return `${separator}<div class="private-message ${mine ? "mine" : "theirs"}" data-message-id="${escapeHtml(message.id || "")}">${reply}${body}<div class="private-message-meta"><small>${time}${message.editedAt ? " · editado" : ""}</small></div>${reactions ? `<div class="private-reactions">${reactions}</div>` : ""}${actions}</div>`;
   }).join("") : `<p class="private-chat-hint">${term ? "No se encontraron mensajes." : "Todavía no hay mensajes. Envía el primero."}</p>`;
@@ -941,6 +942,13 @@ function renderPrivateMessages(messages = []) {
     const message = messages.find(m => m.id === button.dataset.editMessage);
     const text = prompt("Editar mensaje:", message?.text || "");
     if (text !== null && text.trim()) socket.emit("private-message-edit", { targetClientId: activePrivateClientId, messageId: button.dataset.editMessage, text }, response => { if (!response?.ok) notify(response?.error || "No se pudo editar."); });
+  });
+  box.querySelectorAll("[data-join-invite]").forEach(button => button.onclick = () => {
+    const code = button.dataset.joinInvite;
+    if (!code) return;
+    if (currentRoom) return notify("Primero sal de tu sala actual.");
+    if ($("roomCodeInput")) $("roomCodeInput").value = code;
+    $("joinRoom")?.click();
   });
   box.querySelectorAll("[data-delete-message]").forEach(button => button.onclick = () => {
     if (confirm("¿Eliminar este mensaje?")) socket.emit("private-message-delete", { targetClientId: activePrivateClientId, messageId: button.dataset.deleteMessage }, response => { if (!response?.ok) notify(response?.error || "No se pudo eliminar."); });
@@ -1493,12 +1501,22 @@ function renderRoom(room) {
       <div class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name[0]?.toUpperCase() || "?")}</div>
       <div class="person-details">
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${user.id === room.hostId ? "Anfitrión" : "Oyente"}${user.id === mySocketId ? " · Tú" : ""}</span>
+        <span>${escapeHtml(user.roleLabel || (user.id === room.hostId ? "Anfitrión" : "Oyente"))}${user.id === mySocketId ? " · Tú" : ""}</span>
       </div>
+      ${isHost() && user.id !== room.hostId ? `<div class="room-role-tools"><select data-role-user="${escapeHtml(user.id)}"><option value="listener" ${user.role === "listener" ? "selected" : ""}>Oyente</option><option value="moderator" ${user.role === "moderator" ? "selected" : ""}>Moderador</option><option value="dj" ${user.role === "dj" ? "selected" : ""}>DJ</option><option value="guest" ${user.role === "guest" ? "selected" : ""}>Invitado</option><option value="muted" ${user.role === "muted" ? "selected" : ""}>Silenciado</option></select><button type="button" data-room-permissions="${escapeHtml(user.id)}" title="Permisos">⚙</button><button type="button" data-kick-user="${escapeHtml(user.id)}" title="Expulsar">⛔</button></div>` : ""}
       ${user.id !== mySocketId && activeLoginMode === "discord" && String(user.clientId || "").startsWith("discord_") ? `<button class="person-add-friend" type="button" data-add-friend="${escapeHtml(user.clientId || user.id)}" title="Enviar solicitud de amistad">＋</button>` : ""}
     </div>
   `).join("");
   $("people").querySelectorAll("[data-add-friend]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); sendFriendRequest(button.dataset.addFriend); }));
+  $("people").querySelectorAll("[data-role-user]").forEach(select => select.addEventListener("change", event => { event.stopPropagation(); socket.emit("set-room-role", { code: currentRoom.code, targetSocketId: select.dataset.roleUser, role: select.value }, response => { if (!response?.ok) notify(response?.error); }); }));
+  $("people").querySelectorAll("[data-room-permissions]").forEach(button => button.addEventListener("click", event => {
+    event.stopPropagation(); const user = currentRoom.users.find(u => u.id === button.dataset.roomPermissions); if (!user) return;
+    const current = user.permissions || {};
+    const answer = prompt("Permisos personalizados (1=Sí, 0=No)\nPausar,Saltar,Borrar cola,Agregar Twitch,Expulsar", [current.pause?1:0,current.skip?1:0,current.deleteQueue?1:0,current.addTwitch?1:0,current.kick?1:0].join(","));
+    if (answer == null) return; const parts=answer.split(",").map(v=>v.trim()==="1");
+    socket.emit("set-room-role", { code: currentRoom.code, targetSocketId: user.id, role: user.role || "listener", permissions: { pause:parts[0], skip:parts[1], deleteQueue:parts[2], addTwitch:parts[3], kick:parts[4] } }, response => { if (!response?.ok) notify(response?.error); });
+  }));
+  $("people").querySelectorAll("[data-kick-user]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); if (confirm("¿Expulsar a este usuario?")) socket.emit("kick-user", { code: currentRoom.code, targetSocketId: button.dataset.kickUser }, response => { if (!response?.ok) notify(response?.error); }); }));
   refreshRoomSpeakingIndicators();
 
   $("queueCount").textContent = room.queue.length;
@@ -1507,14 +1525,19 @@ function renderRoom(room) {
   renderFriendsList();
   if (activePrivateClientId) { const active = room.users.find(user => (user.clientId || user.id) === activePrivateClientId); activePrivateUserId = active?.id || null; }
   $("queue").innerHTML = room.queue.length ? room.queue.map(video => `
-    <div class="queue-item">
+    <div class="queue-item" data-queue-index="${room.queue.indexOf(video)}">
       <img src="${video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}" alt="">
       <div>
         <strong>${escapeHtml(video.title)}</strong>
         <span>${escapeHtml(video.addedBy || video.channel || "YouTube")}</span>
       </div>
+      ${(currentRoom?.users?.find(u => u.id === mySocketId)?.permissions?.deleteQueue || isHost()) ? `<button class="queue-remove-btn" type="button" data-remove-queue="${room.queue.indexOf(video)}" title="Borrar">×</button>` : ""}
     </div>
   `).join("") : `<div class="empty-queue"><b>♫</b><strong>La cola está vacía</strong><p>Agrega canciones para escuchar juntos.</p></div>`;
+
+  $("queue").querySelectorAll("[data-remove-queue]").forEach(button => button.onclick = () => socket.emit("remove-queue-item", { code: room.code, index: Number(button.dataset.removeQueue) }, response => { if (!response?.ok) notify(response?.error); }));
+  if ($("voteSkipText")) $("voteSkipText").textContent = `${room.skipVote?.votes || 0}/${room.skipVote?.needed || 1}`;
+  if ($("voteSkipBtn")) $("voteSkipBtn").classList.toggle("voted", Boolean(room.skipVote?.voters?.includes?.(mySocketId)));
 
   if (room.video) {
     if (currentVideo?.id !== room.video.id) {
@@ -2545,7 +2568,8 @@ $("queueBtn").addEventListener("click", () => {
 
 function nextVideo() {
   if (!currentRoom) return notify("La función siguiente se usa dentro de una sala.");
-  if (!isHost()) return notify("Solo el anfitrión puede saltar.");
+  const me = currentRoom.users?.find(user => user.id === mySocketId);
+  if (!isHost() && !me?.permissions?.skip) return socket.emit("vote-skip", { code: currentRoom.code }, response => { if (!response?.ok) notify(response?.error); });
 
   socket.emit("next-video", { code: currentRoom.code }, response => {
     if (!response?.ok) notify(response?.error);
@@ -2553,6 +2577,7 @@ function nextVideo() {
 }
 
 $("nextBtn").addEventListener("click", nextVideo);
+$("voteSkipBtn")?.addEventListener("click", () => { if (!currentRoom) return notify("Primero entra a una sala."); socket.emit("vote-skip", { code: currentRoom.code }, response => { if (!response?.ok) notify(response?.error); }); });
 
 $("createRoom").addEventListener("click", () => {
   socket.emit("create-room", {
@@ -2964,18 +2989,16 @@ socket.on("voice-signal", async ({ from, data }) => {
 });
 
 
+socket.on("skip-vote-updated", state => { if ($("voteSkipText")) $("voteSkipText").textContent = `${state?.votes || 0}/${state?.needed || 1}`; });
+socket.on("role-updated", ({ roleLabel }) => { notify(`Tu rol ahora es ${roleLabel || "Oyente"}.`); });
+socket.on("kicked-from-room", ({ reason }) => { resetRoomUI(); notify(reason || "Fuiste expulsado de la sala."); });
+
 socket.on("room-invite", invite => {
   const roomLabel = invite?.roomName || "una sala";
   const sender = invite?.fromName || "Un amigo";
-  addAppNotification("Invitación a sala", `${sender} te invitó a ${roomLabel}.`, "room");
+  addAppNotification("Invitación a sala", `${sender} te invitó a ${roomLabel}. Abre su chat para unirte.`, "room");
   playNotificationSound();
   showPrivateMessageToast({ author: sender, text: `Te invitó a ${roomLabel}` }, invite?.fromClientId || "");
-  if (confirm(`${sender} te invitó a ${roomLabel}. ¿Quieres entrar ahora?`)) {
-    if (currentRoom) return notify("Primero sal de tu sala actual para aceptar otra invitación.");
-    const codeInput = $("roomCodeInput");
-    if (codeInput) codeInput.value = invite.code || "";
-    $("joinRoom")?.click();
-  }
 });
 
 socket.on("private-call-invite", ({ from, name }) => {

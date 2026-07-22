@@ -412,6 +412,33 @@ function roomCode() {
   return fallback;
 }
 
+const ROOM_ROLES = new Set(["moderator", "dj", "listener", "guest", "muted"]);
+const ROLE_LABELS = { host: "Anfitrión", moderator: "Moderador", dj: "DJ", listener: "Oyente", guest: "Invitado", muted: "Silenciado" };
+const ROLE_PERMISSIONS = {
+  host: { pause: true, skip: true, deleteQueue: true, addTwitch: true, kick: true },
+  moderator: { pause: true, skip: true, deleteQueue: true, addTwitch: true, kick: true },
+  dj: { pause: true, skip: true, deleteQueue: true, addTwitch: true, kick: false },
+  listener: { pause: false, skip: false, deleteQueue: false, addTwitch: false, kick: false },
+  guest: { pause: false, skip: false, deleteQueue: false, addTwitch: false, kick: false },
+  muted: { pause: false, skip: false, deleteQueue: false, addTwitch: false, kick: false }
+};
+function roomRole(room, socketId) {
+  if (room.hostId === socketId) return "host";
+  return room.users.get(socketId)?.role || "listener";
+}
+function roomPermissions(room, socketId) {
+  if (room.hostId === socketId) return { ...ROLE_PERMISSIONS.host };
+  const user = room.users.get(socketId);
+  return { ...(ROLE_PERMISSIONS[user?.role || "listener"] || ROLE_PERMISSIONS.listener), ...(user?.permissions || {}) };
+}
+function canRoom(room, socketId, permission) { return Boolean(roomPermissions(room, socketId)[permission]); }
+function resetSkipVotes(room) { room.skipVotes = new Set(); }
+function skipVoteState(room) {
+  const eligible = [...room.users.keys()].filter(id => id !== room.hostId && roomRole(room, id) !== "muted");
+  const needed = Math.max(1, Math.ceil(eligible.length * 0.6));
+  return { votes: room.skipVotes?.size || 0, needed, eligible: eligible.length };
+}
+
 function currentRoomTime(room) {
   if (!room.playing) return room.time;
   return room.time + (Date.now() - room.updatedAt) / 1000;
@@ -428,13 +455,17 @@ function publicRoom(code, room) {
       name: user.name,
       avatar: user.avatar || "",
       banner: user.banner || "",
-      clientId: user.clientId || ""
+      clientId: user.clientId || "",
+      role: id === room.hostId ? "host" : (user.role || "listener"),
+      roleLabel: ROLE_LABELS[id === room.hostId ? "host" : (user.role || "listener")],
+      permissions: roomPermissions(room, id)
     })),
     video: room.video,
     playing: room.playing,
     time: currentRoomTime(room),
     queue: room.queue,
     waitingForQueue: room.waitingForQueue,
+    skipVote: skipVoteState(room),
     voiceUsers: [...(room.voiceUsers || new Set())],
     chat: room.chat.slice(-80)
   };
@@ -725,7 +756,7 @@ io.on("connection", socket => {
     } catch (error) { callback?.({ ok: false, error: error.message || "No se pudo reaccionar." }); }
   });
 
-  socket.on("room-invite", ({ targetClientId, code } = {}, callback) => {
+  socket.on("room-invite", async ({ targetClientId, code } = {}, callback) => {
     const senderClientId = safeClientId(socketClients.get(socket.id));
     targetClientId = safeClientId(targetClientId);
     code = String(code || "").trim().toUpperCase();
@@ -734,14 +765,21 @@ io.on("connection", socket => {
       return callback?.({ ok: false, error: "No se pudo enviar la invitación." });
     }
     const sender = room.users.get(socket.id);
-    io.to(`client:${targetClientId}`).emit("room-invite", {
+    const invite = {
       code,
       roomName: room.roomName || `Sala de ${sender?.name || "Usuario"}`,
       visibility: room.visibility || "public",
       fromClientId: senderClientId,
       fromName: sender?.name || "Usuario"
-    });
-    callback?.({ ok: true });
+    };
+    let message = null;
+    try { message = await db.saveRoomInvite(senderClientId, targetClientId, invite.fromName, invite); } catch (error) { console.error("No se pudo guardar invitación:", error.message); }
+    io.to(`client:${targetClientId}`).emit("room-invite", { ...invite, message });
+    if (message) {
+      io.to(`client:${targetClientId}`).emit("private-chat-global", message);
+      socket.emit("private-chat-global", message);
+    }
+    callback?.({ ok: true, message });
   });
 
   socket.on("create-room", ({ name, avatar, banner, clientId, visibility, roomName }, callback) => {
@@ -760,7 +798,9 @@ io.on("connection", socket => {
         name: username,
         avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
         banner: String(banner || "").slice(0, 3 * 1024 * 1024),
-        clientId: safeClientId(clientId) || socket.id
+        clientId: safeClientId(clientId) || socket.id,
+        role: "host",
+        permissions: {}
       }]]),
       video: null,
       playing: false,
@@ -770,7 +810,8 @@ io.on("connection", socket => {
       waitingForQueue: false,
       voiceUsers: new Set(),
       chat: [],
-      privateChats: new Map()
+      privateChats: new Map(),
+      skipVotes: new Set()
     };
 
     rooms.set(code, room);
@@ -791,7 +832,9 @@ io.on("connection", socket => {
       name: username,
       avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
       banner: String(banner || "").slice(0, 3 * 1024 * 1024),
-      clientId: safeClientId(clientId) || socket.id
+      clientId: safeClientId(clientId) || socket.id,
+      role: authenticatedIdentityId ? "listener" : "guest",
+      permissions: {}
     });
     socket.join(code);
 
@@ -812,7 +855,9 @@ io.on("connection", socket => {
       name: username,
       avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
       banner: String(banner || "").slice(0, 3 * 1024 * 1024),
-      clientId: safeClientId(clientId) || room.users.get(socket.id)?.clientId || socket.id
+      clientId: safeClientId(clientId) || room.users.get(socket.id)?.clientId || socket.id,
+      role: room.users.get(socket.id)?.role || (authenticatedIdentityId ? "listener" : "guest"),
+      permissions: room.users.get(socket.id)?.permissions || {}
     });
     emitRoom(code);
     callback?.({ ok: true });
@@ -845,16 +890,43 @@ io.on("connection", socket => {
     callback?.({ ok: true });
   });
 
+  socket.on("set-room-role", ({ code, targetSocketId, role, permissions } = {}, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || room.hostId !== socket.id) return callback?.({ ok: false, error: "Solo el anfitrión puede asignar roles." });
+    if (!room.users.has(targetSocketId) || targetSocketId === room.hostId) return callback?.({ ok: false, error: "Usuario no válido." });
+    role = ROOM_ROLES.has(role) ? role : "listener";
+    const allowed = ["pause", "skip", "deleteQueue", "addTwitch", "kick"];
+    const custom = {};
+    for (const key of allowed) if (typeof permissions?.[key] === "boolean") custom[key] = permissions[key];
+    const user = room.users.get(targetSocketId);
+    user.role = role; user.permissions = custom;
+    if (role === "muted") room.voiceUsers?.delete(targetSocketId);
+    emitRoom(code);
+    io.to(targetSocketId).emit("role-updated", { role, roleLabel: ROLE_LABELS[role], permissions: roomPermissions(room, targetSocketId) });
+    callback?.({ ok: true });
+  });
+
+  socket.on("kick-user", ({ code, targetSocketId } = {}, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !canRoom(room, socket.id, "kick")) return callback?.({ ok: false, error: "No tienes permiso para expulsar." });
+    if (!room.users.has(targetSocketId) || targetSocketId === room.hostId) return callback?.({ ok: false, error: "Usuario no válido." });
+    const target = io.sockets.sockets.get(targetSocketId);
+    const name = room.users.get(targetSocketId)?.name || "Usuario";
+    room.users.delete(targetSocketId); room.voiceUsers?.delete(targetSocketId); room.skipVotes?.delete(targetSocketId);
+    target?.leave(code); target?.emit("kicked-from-room", { code, reason: "Fuiste expulsado de la sala." });
+    io.to(code).emit("system-message", `${name} fue expulsado de la sala.`);
+    emitRoom(code); callback?.({ ok: true });
+  });
+
   socket.on("set-video", ({ code, video }, callback) => {
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
 
     if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
-    if (room.hostId !== socket.id) {
-      return callback?.({ ok: false, error: "Solo el anfitrión puede cambiar el video." });
-    }
-
     const provider = video.provider === "twitch" ? "twitch" : "youtube";
+    if (provider === "twitch" && !canRoom(room, socket.id, "addTwitch")) return callback?.({ ok: false, error: "No tienes permiso para agregar Twitch." });
     room.video = {
       provider,
       id: String(video.id),
@@ -867,6 +939,7 @@ io.on("connection", socket => {
     room.waitingForQueue = false;
     room.time = 0;
     room.updatedAt = Date.now();
+    resetSkipVotes(room);
 
     io.to(code).emit("video-changed", {
       video: room.video,
@@ -882,8 +955,8 @@ io.on("connection", socket => {
     const room = rooms.get(code);
 
     if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
-    if (room.hostId !== socket.id) {
-      return callback?.({ ok: false, error: "Solo el anfitrión controla el video." });
+    if (!canRoom(room, socket.id, "pause")) {
+      return callback?.({ ok: false, error: "No tienes permiso para controlar la reproducción." });
     }
 
     const safeTime = Math.max(0, Number(time) || 0);
@@ -934,6 +1007,7 @@ io.on("connection", socket => {
     if (!room.users.has(socket.id)) return callback?.({ ok: false, error: "Primero entra a la sala." });
 
     const provider = video.provider === "twitch" ? "twitch" : "youtube";
+    if (provider === "twitch" && !canRoom(room, socket.id, "addTwitch")) return callback?.({ ok: false, error: "Tu rol no permite agregar Twitch." });
     const item = {
       provider,
       id: String(video.id),
@@ -968,13 +1042,38 @@ io.on("connection", socket => {
     callback?.({ ok: true, autoStarted: false });
   });
 
+  socket.on("vote-skip", ({ code } = {}, callback) => {
+    code = String(code || "").trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !room.users.has(socket.id) || !room.video) return callback?.({ ok: false, error: "No hay reproducción activa." });
+    if (roomRole(room, socket.id) === "muted") return callback?.({ ok: false, error: "Tu rol está silenciado." });
+    room.skipVotes ||= new Set();
+    if (room.skipVotes.has(socket.id)) room.skipVotes.delete(socket.id); else room.skipVotes.add(socket.id);
+    const state = skipVoteState(room);
+    io.to(code).emit("skip-vote-updated", state);
+    if (state.votes >= state.needed) {
+      const video = room.queue.shift(); resetSkipVotes(room);
+      if (!video) { room.playing=false; room.waitingForQueue=true; room.video=null; room.time=0; room.updatedAt=Date.now(); io.to(code).emit("queue-ended"); }
+      else { room.video=video; room.playing=true; room.waitingForQueue=false; room.time=0; room.updatedAt=Date.now(); io.to(code).emit("video-changed", { video, playing:true, time:0 }); }
+      emitRoom(code); return callback?.({ ok:true, skipped:true });
+    }
+    emitRoom(code); callback?.({ ok:true, state });
+  });
+
+  socket.on("remove-queue-item", ({ code, index } = {}, callback) => {
+    code = String(code || "").trim().toUpperCase(); const room = rooms.get(code);
+    if (!room || !canRoom(room, socket.id, "deleteQueue")) return callback?.({ ok:false, error:"No tienes permiso para borrar canciones." });
+    index = Number(index); if (!Number.isInteger(index) || index < 0 || index >= room.queue.length) return callback?.({ ok:false, error:"Canción no válida." });
+    room.queue.splice(index,1); emitRoom(code); callback?.({ok:true});
+  });
+
   socket.on("next-video", ({ code }, callback) => {
     code = String(code || "").trim().toUpperCase();
     const room = rooms.get(code);
 
     if (!room) return callback?.({ ok: false, error: "Sala no encontrada." });
-    if (room.hostId !== socket.id) {
-      return callback?.({ ok: false, error: "Solo el anfitrión puede saltar." });
+    if (!canRoom(room, socket.id, "skip")) {
+      return callback?.({ ok: false, error: "Tu rol no permite saltar directamente. Usa la votación." });
     }
 
     const video = room.queue.shift();
@@ -999,6 +1098,7 @@ io.on("connection", socket => {
     room.waitingForQueue = false;
     room.time = 0;
     room.updatedAt = Date.now();
+    resetSkipVotes(room);
 
     io.to(code).emit("video-changed", {
       video,
@@ -1144,6 +1244,7 @@ io.on("connection", socket => {
     const room = rooms.get(code);
 
     if (!room || !room.users.has(socket.id)) return callback?.({ ok: false, error: "Sala no encontrada." });
+    if (roomRole(room, socket.id) === "muted") return callback?.({ ok: false, error: "Estás silenciado en esta sala." });
 
     text = String(text || "").trim().slice(0, 400);
     image = sanitizeChatImage(image);
