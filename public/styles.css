@@ -3384,3 +3384,11 @@ body.auth-gated { overflow: hidden; }
   .person-add-friend { width: 32px; height: 32px; }
   .friend-request-actions { gap: 4px; }
 }
+
+
+/* V86: ocultar por completo el reproductor cuando no hay sala o reproducción. */
+body.player-dock-hidden .player-dock{display:none!important}
+body.player-dock-hidden .app-layout{grid-template-rows:1fr 0!important}
+@media(max-width:820px){
+  body.player-dock-hidden .app-layout{padding-bottom:0!important}
+}

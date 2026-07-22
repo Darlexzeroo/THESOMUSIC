@@ -365,10 +365,21 @@ function refreshProfileUI() {
 }
 
 
+function updatePlayerDockVisibility() {
+  // El reproductor inferior solo debe ocupar espacio cuando el usuario está
+  // dentro de una sala y existe una canción/directo activo.
+  const shouldShow = Boolean(currentRoom && currentVideo?.id);
+  const dock = $("playerDock");
+  dock?.classList.toggle("hidden", !shouldShow);
+  dock?.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+  document.body.classList.toggle("player-dock-hidden", !shouldShow);
+}
+
 function updateTrackUI(video) {
   const hasTrack = Boolean(video?.id);
   document.body.classList.toggle("has-track", hasTrack);
   document.body.classList.toggle("is-idle", !hasTrack);
+  updatePlayerDockVisibility();
 
   if (!hasTrack) {
     $("nowPlaying").textContent = "Ninguna canción";
@@ -1376,6 +1387,7 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
 
 function renderRoom(room) {
   currentRoom = room;
+  updatePlayerDockVisibility();
   $("roomEntry").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
   $("railRoomChat")?.classList.remove("hidden");
@@ -1480,6 +1492,7 @@ function resetRoomUI() {
   leaveVoiceChat(false);
   clearPlaybackAfterLeavingRoom();
   currentRoom = null;
+  updatePlayerDockVisibility();
   $("roomEntry").classList.remove("hidden");
   $("roomPanel").classList.add("hidden");
   $("railRoomChat")?.classList.add("hidden");
