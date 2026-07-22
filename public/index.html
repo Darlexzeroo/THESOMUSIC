@@ -10,6 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style id="critical-auth-style">
+    html,body{background:#03050e}
+    #loginGate.hidden{display:none!important}
+    body.auth-pending{overflow:hidden}
+    body.auth-pending > *:not(.auth-boot-splash):not(script){visibility:hidden!important}
+    body.auth-pending .auth-boot-splash{display:grid!important}
+  </style>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="is-idle auth-pending">
@@ -17,7 +24,7 @@
     <div class="auth-boot-logo"><span>◢◣</span><strong>THESO</strong></div>
     <small>Comprobando sesión…</small>
   </div>
-  <section id="loginGate" class="login-gate" aria-labelledby="loginGateTitle">
+  <section id="loginGate" class="login-gate hidden" aria-labelledby="loginGateTitle">
     <div class="login-gate-card">
       <div class="login-gate-brand"><span>◢◣</span><strong>THESO</strong></div>
       <p class="login-gate-kicker">MÚSICA EN SINCRONÍA</p>

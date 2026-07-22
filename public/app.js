@@ -3514,7 +3514,10 @@ function updateDiscordCard() {
 }
 
 async function loadDiscordSession() {
-  setLoginGateVisible(true, "Comprobando sesión…");
+  // Mantén la pantalla de arranque mientras se consulta la sesión.
+  // No reveles el login hasta confirmar que realmente no hay una cuenta activa.
+  const bootStatus = document.querySelector("#authBootSplash small");
+  if (bootStatus) bootStatus.textContent = "Comprobando sesión…";
   try {
     const response = await fetch("/api/auth/me", { credentials: "same-origin" });
     const data = await response.json();

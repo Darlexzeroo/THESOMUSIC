@@ -149,3 +149,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - No pueden usar llamadas privadas.
 - El botón de Amigos y los botones `+` se ocultan en modo invitado.
 - El servidor también valida estas restricciones para impedir que se evadan desde el navegador.
+
+
+## V88
+- El login inicia oculto desde el HTML.
+- CSS crítico inline evita que el formulario se pinte antes de cargar la hoja de estilos.
+- La comprobación de sesión conserva la pantalla de arranque y solo muestra el login cuando el servidor confirma que no hay sesión.
