@@ -133,3 +133,19 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Carga amigos y solicitudes después de registrar el socket.
 - Añade tiempos de espera y reintentos seguros.
 - Actualiza conversaciones al recibir solicitudes.
+
+
+## V84 - Notificaciones separadas por cuenta
+
+- La campana, los avisos privados y los contadores se limpian al cerrar sesión o cambiar de cuenta.
+- El modo invitado ignora mensajes y solicitudes retrasados del socket de una cuenta Discord anterior.
+- Al volver a Discord, las notificaciones nuevas corresponden únicamente a esa cuenta.
+
+## V85 - Restricciones para invitados
+
+- Los invitados solo pueden participar en chats de sala.
+- No pueden enviar ni recibir solicitudes de amistad.
+- No pueden abrir, enviar ni recibir mensajes privados.
+- No pueden usar llamadas privadas.
+- El botón de Amigos y los botones `+` se ocultan en modo invitado.
+- El servidor también valida estas restricciones para impedir que se evadan desde el navegador.

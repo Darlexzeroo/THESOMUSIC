@@ -556,19 +556,16 @@ io.on("connection", socket => {
     try {
       const clientId = socketClients.get(socket.id);
       if (!clientId) return callback?.({ ok: false, error: "Identidad no válida." });
-      if (authenticatedIdentityId && db.isMongoReady()) {
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) {
+        return callback?.({ ok: false, error: "Los invitados no pueden usar conversaciones privadas." });
+      }
+      if (db.isMongoReady()) {
         const [state, conversationContacts] = await Promise.all([db.getFriendState(clientId), db.getConversationContacts(clientId)]);
         const merged = new Map();
         [...state.friends, ...conversationContacts].forEach(contact => merged.set(contact.clientId, { ...contact, ...getContactMeta(contact.clientId) }));
         return callback?.({ ok: true, contacts: [...merged.values()] });
       }
-      const ids = new Set();
-      for (const [key, messages] of Object.entries(persistentPrivateChats)) {
-        if (key === "__contacts" || !Array.isArray(messages)) continue;
-        const parts = key.split(":");
-        if (parts.includes(clientId)) parts.filter(id => id !== clientId).forEach(id => ids.add(id));
-      }
-      callback?.({ ok: true, contacts: [...ids].map(getContactMeta) });
+      return callback?.({ ok: false, error: "MongoDB Atlas no está disponible." });
     } catch (error) {
       callback?.({ ok: false, error: "No se pudieron cargar las conversaciones." });
     }
@@ -578,15 +575,16 @@ io.on("connection", socket => {
     try {
       const clientId = socketClients.get(socket.id);
       targetClientId = safeClientId(targetClientId);
-      if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
-      if (authenticatedIdentityId && db.isMongoReady()) {
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) return callback?.({ ok: false, error: "Los invitados no pueden abrir chats privados." });
+      if (!clientId || !targetClientId || clientId === targetClientId || !targetClientId.startsWith("discord_")) return callback?.({ ok: false, error: "No se pudo abrir el chat privado." });
+      if (db.isMongoReady()) {
         if (!(await db.areFriends(clientId, targetClientId))) return callback?.({ ok: false, error: "Deben ser amigos para conservar este chat." });
         const messages = await db.getMessages(clientId, targetClientId, 150);
         const contacts = new Map([getContactMeta(clientId), getContactMeta(targetClientId)].map(x => [x.clientId, x]));
         messages.forEach(message => { message.author = contacts.get(message.fromClientId)?.name || "Usuario"; });
         return callback?.({ ok: true, messages });
       }
-      callback?.({ ok: true, messages: persistentPrivateChats[persistentChatKey(clientId, targetClientId)] || [] });
+      callback?.({ ok: false, error: "MongoDB Atlas no está disponible." });
     } catch (error) {
       callback?.({ ok: false, error: error.message || "No se pudo cargar el historial." });
     }
@@ -596,34 +594,19 @@ io.on("connection", socket => {
     try {
       const clientId = socketClients.get(socket.id);
       targetClientId = safeClientId(targetClientId);
-      if (!clientId || !targetClientId || clientId === targetClientId) return callback?.({ ok: false, error: "Conversación no válida." });
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) return callback?.({ ok: false, error: "Los invitados no pueden enviar mensajes privados." });
+      if (!clientId || !targetClientId || clientId === targetClientId || !targetClientId.startsWith("discord_")) return callback?.({ ok: false, error: "Conversación no válida." });
       text = String(text || "").trim().slice(0, 400);
       image = sanitizeChatImage(image);
       if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
       const senderMeta = getContactMeta(clientId);
       const targetMeta = getContactMeta(targetClientId);
       let message;
-      if (authenticatedIdentityId && db.isMongoReady()) {
+      if (db.isMongoReady()) {
         if (!(await db.areFriends(clientId, targetClientId))) return callback?.({ ok: false, error: "Primero deben aceptar la solicitud de amistad." });
         message = await db.saveMessage(clientId, targetClientId, text, image, senderMeta.name);
       } else {
-        message = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          from: socket.id,
-          to: targetMeta.socketId,
-          fromSocketId: socket.id,
-          fromClientId: clientId,
-          toClientId: targetClientId,
-          author: senderMeta.name || "Usuario",
-          text,
-          image,
-          createdAt: Date.now()
-        };
-        const key = persistentChatKey(clientId, targetClientId);
-        const history = persistentPrivateChats[key] || [];
-        history.push(message);
-        persistentPrivateChats[key] = history.slice(-150);
-        savePersistentPrivateChats();
+        return callback?.({ ok: false, error: "MongoDB Atlas no está disponible." });
       }
       io.to(`client:${targetClientId}`).emit("private-message-notification", message);
       io.to(`client:${targetClientId}`).emit("private-chat-global", message);
@@ -960,6 +943,7 @@ io.on("connection", socket => {
 
 
   socket.on("private-call-invite", ({ code, target }, callback) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return callback?.({ ok: false, error: "Los invitados no pueden usar llamadas privadas." });
     code = String(code || "").trim().toUpperCase(); target = String(target || "");
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id) || !room.users.has(target) || target === socket.id) return callback?.({ ok:false, error:"Usuario no disponible." });
@@ -968,6 +952,7 @@ io.on("connection", socket => {
   });
 
   socket.on("private-call-response", ({ code, target, accepted }) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return;
     code = String(code || "").trim().toUpperCase(); target = String(target || "");
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
@@ -975,6 +960,7 @@ io.on("connection", socket => {
   });
 
   socket.on("private-call-signal", ({ code, target, data }) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return;
     code = String(code || "").trim().toUpperCase(); target = String(target || "");
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
@@ -982,6 +968,7 @@ io.on("connection", socket => {
   });
 
   socket.on("private-call-end", ({ code, target }) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return;
     code = String(code || "").trim().toUpperCase(); target = String(target || "");
     const room = rooms.get(code);
     if (!room || !room.users.has(socket.id) || !room.users.has(target)) return;
@@ -989,6 +976,7 @@ io.on("connection", socket => {
   });
 
   socket.on("private-chat-history", ({ code, target }, callback) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return callback?.({ ok: false, error: "Los invitados no pueden abrir chats privados." });
     code = String(code || "").trim().toUpperCase();
     target = String(target || "");
     const room = rooms.get(code);
@@ -1003,6 +991,7 @@ io.on("connection", socket => {
   });
 
   socket.on("private-chat", ({ code, target, text, image }, callback) => {
+    if (!authenticatedIdentityId || socketClients.get(socket.id) !== authenticatedIdentityId) return callback?.({ ok: false, error: "Los invitados no pueden enviar mensajes privados." });
     code = String(code || "").trim().toUpperCase();
     target = String(target || "");
     const room = rooms.get(code);

@@ -300,6 +300,18 @@ function resetAccountScopedState() {
   privateMessageCache.clear();
   resetPrivateChat();
   updatePrivateUnreadBadge();
+
+  // Las notificaciones pertenecen a la cuenta activa. Al cambiar entre
+  // Discord e invitado no deben conservarse en la campana ni en el título.
+  appNotifications.length = 0;
+  unreadAppNotifications = 0;
+  clearTimeout(notificationToastTimer);
+  document.getElementById("privateMessageToast")?.classList.add("hidden");
+  document.getElementById("notificationCenter")?.classList.add("hidden");
+  updateNotificationBell();
+  renderNotifications();
+  updateDocumentTitle();
+
   renderFriendsList();
 }
 
@@ -611,6 +623,7 @@ function closeRoomModal() {
 }
 
 function openFriendsModal() {
+  if (!requireDiscordSocial("Los invitados solo pueden escribir en el chat de las salas. Inicia sesión con Discord para usar amigos y chats privados.")) return;
   document.body.classList.remove("mobile-menu-open");
   $("sidebarBackdrop")?.classList.add("hidden");
   $("mobileMenuBtn")?.setAttribute("aria-expanded", "false");
@@ -650,6 +663,12 @@ function updatePrivateUnreadBadge() {
 
 function getRoomUser(id) {
   return currentRoom?.users?.find(user => user.id === id) || null;
+}
+
+function requireDiscordSocial(message = "Inicia sesión con Discord para usar amigos y mensajes privados.") {
+  if (activeLoginMode === "discord") return true;
+  notify(message);
+  return false;
 }
 
 function sendFriendRequest(targetClientId) {
@@ -744,7 +763,9 @@ function renderFriendsList() {
   [...savedPrivateContacts, ...persistentFriends].forEach(contact => merged.set(contact.clientId, { ...contact, socketId: contact.socketId || null, inRoom: false }));
   roomUsers.forEach(user => merged.set(user.clientId, { ...(merged.get(user.clientId) || {}), ...user }));
   const friendIds = new Set(persistentFriends.map(friend => friend.clientId));
-  const users = [...merged.values()].filter(user => user.clientId && user.clientId !== persistentClientId && (activeLoginMode !== "discord" || friendIds.has(user.clientId)));
+  const users = activeLoginMode === "discord"
+    ? [...merged.values()].filter(user => user.clientId && user.clientId !== persistentClientId && friendIds.has(user.clientId))
+    : [];
   $("friendsCount").textContent = users.length;
 
   const incomingHtml = incomingFriendRequests.length ? `<section class="friend-request-section"><strong>Solicitudes recibidas</strong>${incomingFriendRequests.map(user => `
@@ -771,7 +792,7 @@ function renderFriendsList() {
   }).join("")}</section>` : "";
 
   const loginHint = activeLoginMode !== "discord"
-    ? '<p class="friends-empty">Inicia sesión con Discord para guardar amigos y conversaciones en MongoDB Atlas.</p>'
+    ? '<p class="friends-empty">Los invitados solo pueden escribir en los chats de las salas. Inicia sesión con Discord para enviar solicitudes y mensajes privados.</p>'
     : (databaseConnected === false
       ? '<p class="friends-empty">No se pudo conectar con MongoDB Atlas. Revisa los logs de Render.</p>'
       : (databaseConnected === null
@@ -799,6 +820,15 @@ function mergePrivateMessages(clientId, messages = []) {
 }
 
 function loadPrivateConversations(callback) {
+  if (activeLoginMode !== "discord") {
+    savedPrivateContacts = [];
+    persistentFriends = [];
+    incomingFriendRequests = [];
+    outgoingFriendRequests = [];
+    renderFriendsList();
+    callback?.({ ok: false, error: "Los invitados no tienen conversaciones privadas." });
+    return;
+  }
   if (!socket.connected) {
     renderFriendsList();
     callback?.({ ok: false, error: "Socket desconectado." });
@@ -839,6 +869,7 @@ function renderPrivateMessages(messages = []) {
 }
 
 function openPrivateChatByClient(clientId) {
+  if (!requireDiscordSocial("Los chats privados requieren iniciar sesión con Discord.")) return;
   const roomUser = currentRoom?.users?.find(user => (user.clientId || user.id) === clientId);
   const saved = savedPrivateContacts.find(user => user.clientId === clientId);
   const user = roomUser ? { ...roomUser, socketId: roomUser.id, clientId: roomUser.clientId || roomUser.id, online: true } : saved;
@@ -1363,7 +1394,7 @@ function renderRoom(room) {
         <strong>${escapeHtml(user.name)}</strong>
         <span>${user.id === room.hostId ? "Anfitrión" : "Oyente"}${user.id === mySocketId ? " · Tú" : ""}</span>
       </div>
-      ${user.id !== mySocketId ? `<button class="person-add-friend" type="button" data-add-friend="${escapeHtml(user.clientId || user.id)}" title="Enviar solicitud de amistad">＋</button>` : ""}
+      ${user.id !== mySocketId && activeLoginMode === "discord" && String(user.clientId || "").startsWith("discord_") ? `<button class="person-add-friend" type="button" data-add-friend="${escapeHtml(user.clientId || user.id)}" title="Enviar solicitud de amistad">＋</button>` : ""}
     </div>
   `).join("");
   $("people").querySelectorAll("[data-add-friend]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); sendFriendRequest(button.dataset.addFriend); }));
@@ -2554,6 +2585,7 @@ $("privateCallPanelMute").addEventListener("click", () => {
 
 $("privateChatForm").addEventListener("submit", event => {
   event.preventDefault();
+  if (!requireDiscordSocial("Los invitados no pueden enviar mensajes privados.")) return;
   if (!activePrivateClientId) return notify("Selecciona una conversación privada.");
   const input = $("privateChatInput");
   const text = input.value.trim();
@@ -2823,6 +2855,7 @@ socket.on("room-invite", invite => {
 });
 
 socket.on("private-call-invite", ({ from, name }) => {
+  if (activeLoginMode !== "discord") return;
   addFriendsNotification("Llamada privada", `${name || "Un usuario"} te está llamando.`, { icon: "📞", userId: from });
   incomingPrivateCallerId = from;
   const user = getRoomUser(from);
@@ -2865,6 +2898,7 @@ socket.on("private-call-end", ({ from }) => {
 // El servidor envía este evento únicamente al destinatario. Así el aviso
 // aparece siempre, incluso cuando la conversación ya está abierta.
 socket.on("friend-request-received", request => {
+  if (activeLoginMode !== "discord") return;
   addFriendsNotification("Nueva solicitud de amistad", `${request.name || "Un usuario"} quiere agregarte.`, { clientId: request.clientId, icon: "👋" });
   notify(`${request.name || "Un usuario"} te envió una solicitud de amistad.`);
   loadFriendState();
@@ -2872,12 +2906,16 @@ socket.on("friend-request-received", request => {
 });
 
 socket.on("friend-state-changed", ({ type } = {}) => {
+  if (activeLoginMode !== "discord") return;
   notify(type === "accepted" ? "Ahora son amigos." : "La solicitud fue actualizada.");
   loadFriendState();
   loadPrivateConversations();
 });
 
 socket.on("private-message-notification", message => {
+  // Los chats persistentes pertenecen exclusivamente a una cuenta Discord.
+  // Ignora eventos retrasados del socket anterior después de cerrar sesión.
+  if (activeLoginMode !== "discord") return;
   if (!message || message.fromClientId === persistentClientId) return;
   const otherClientId = message.fromClientId;
   mergePrivateMessages(otherClientId, [message]);
@@ -2901,7 +2939,7 @@ socket.on("private-message-notification", message => {
 });
 
 socket.on("private-chat-global", message => {
-  if (!message) return;
+  if (activeLoginMode !== "discord" || !message) return;
   const otherClientId = message.fromClientId === persistentClientId ? message.toClientId : message.fromClientId;
   const messages = mergePrivateMessages(otherClientId, [message]);
   const privateChatIsOpen = activePrivateClientId === otherClientId && !$("friendsModal").classList.contains("hidden");
@@ -3369,6 +3407,21 @@ function saveGuestProfile() {
   } catch {}
 }
 
+function updateSocialAccessUi() {
+  const enabled = activeLoginMode === "discord";
+  const friendsShortcut = $("friendsShortcut");
+  if (friendsShortcut) {
+    friendsShortcut.classList.toggle("hidden", !enabled);
+    friendsShortcut.disabled = !enabled;
+  }
+  if (!enabled) {
+    closeFriendsModal();
+    resetPrivateChat();
+    privateUnread.clear();
+    updatePrivateUnreadBadge();
+  }
+}
+
 function applyGuestProfile(name) {
   const previousMode = activeLoginMode;
   if (previousMode && previousMode !== "guest") leaveRoomForAccountSwitch();
@@ -3388,6 +3441,7 @@ function applyGuestProfile(name) {
   if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
   else localStorage.removeItem("waveroom-banner");
   refreshProfileUI();
+  updateSocialAccessUi();
   registerIdentityAfterAccountSwitch(previousMode);
   setLoginGateVisible(false);
 }
@@ -3414,6 +3468,7 @@ function applyDiscordProfile(user) {
   if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
   else localStorage.removeItem("waveroom-banner");
   refreshProfileUI();
+  updateSocialAccessUi();
   registerIdentityAfterAccountSwitch(previousMode);
   if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
   setLoginGateVisible(false);
