@@ -189,3 +189,16 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Permisos por usuario para pausar, saltar, borrar cola, agregar Twitch y expulsar.
 - Votación para saltar con umbral del 60% de participantes elegibles.
 - Validaciones del lado del servidor para impedir saltarse permisos desde el navegador.
+
+## V92 — Reconexión inteligente, móvil y moderación
+
+- Reconexión automática a la sala durante 45 segundos tras una caída o recarga.
+- Recuperación del video/directo actual, tiempo sincronizado, cola y últimos mensajes del chat.
+- La sala activa se recuerda por cuenta y se restaura al recargar hasta que el usuario pulsa “Salir”.
+- Se reemplaza el socket anterior por el nuevo para evitar participantes duplicados.
+- Límite de 5 mensajes cada 10 segundos por usuario.
+- Validación básica de enlaces y límites de texto/imágenes.
+- Reportar, bloquear y banear usuarios desde la lista de participantes.
+- Cola compacta, controles táctiles grandes, barra inferior móvil y ajuste al teclado virtual.
+
+> Las salas continúan almacenadas en memoria del servidor. Una recarga del navegador se recupera; un reinicio completo de Render elimina las salas activas. Para persistencia incluso tras reinicios del servidor se necesitaría guardar el estado de sala en MongoDB o Redis.
