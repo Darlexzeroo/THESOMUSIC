@@ -116,3 +116,7 @@ Puedes revisar la conexión visitando `/api/database/status`. Debe responder `co
 - Al volver a Discord, amigos y chats se cargan nuevamente desde MongoDB Atlas.
 - Socket.IO se reconecta después de cerrar sesión para actualizar la identidad del servidor.
 - La lista de conversaciones se reemplaza por cuenta en vez de mezclar datos anteriores.
+
+## V81 · Cambio de cuenta y salas
+
+Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automáticamente la sala activa, limpia la interfaz de la sala y reconecta Socket.IO con la nueva identidad. Esto evita que el modo invitado conserve visualmente el usuario, rol o sala de la cuenta Discord anterior.

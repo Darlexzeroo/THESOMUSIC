@@ -267,6 +267,20 @@ function registerPersistentClient(callback) {
 // Limpia toda la información que pertenece a la cuenta anterior. Los amigos,
 // solicitudes, conversaciones y contadores de Discord nunca deben heredarse
 // por una sesión de invitado (ni al revés).
+function leaveRoomForAccountSwitch() {
+  // Una sala pertenece a la identidad con la que se entró. Al cambiar entre
+  // Discord e invitado nunca conservamos la sala anterior en pantalla ni en
+  // el servidor, porque eso mostraría el perfil de la cuenta previa.
+  const roomCode = currentRoom?.code;
+  if (roomCode && socket.connected) {
+    socket.emit("leave-room", { code: roomCode });
+  }
+  if (currentRoom) {
+    resetRoomUI();
+    closeRoomModal();
+  }
+}
+
 function resetAccountScopedState() {
   savedPrivateContacts = [];
   persistentFriends = [];
@@ -3305,6 +3319,7 @@ function saveGuestProfile() {
 
 function applyGuestProfile(name) {
   const previousMode = activeLoginMode;
+  if (previousMode && previousMode !== "guest") leaveRoomForAccountSwitch();
   resetAccountScopedState();
   activeLoginMode = "guest";
   persistentClientId = browserGuestClientId;
@@ -3327,6 +3342,7 @@ function applyGuestProfile(name) {
 
 function applyDiscordProfile(user) {
   const previousMode = activeLoginMode;
+  if (previousMode && previousMode !== "discord") leaveRoomForAccountSwitch();
   resetAccountScopedState();
   activeLoginMode = "discord";
   persistentClientId = `discord_${String(user.id || "").replace(/[^0-9]/g, "")}`;
@@ -3418,6 +3434,9 @@ $("guestLoginForm")?.addEventListener("submit", event => {
 
 $("discordLogoutButton")?.addEventListener("click", async () => {
   try {
+    // Primero abandona cualquier sala usando todavía la identidad de Discord.
+    // Después se elimina la cookie y se reconecta el socket como invitado.
+    leaveRoomForAccountSwitch();
     await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
     resetAccountScopedState();
     discordAuthenticatedUser = null;
