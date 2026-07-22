@@ -500,7 +500,7 @@ io.on("connection", socket => {
       callback?.({ ok: true, clientId, authenticated: Boolean(authenticatedIdentityId), database: db.isMongoReady() });
     } catch (error) {
       console.error("Error registrando cliente:", error);
-      callback?.({ ok: false, error: "No se pudo registrar tu cuenta." });
+      callback?.({ ok: false, error: "No se pudo registrar tu cuenta.", database: db.isMongoReady() });
     }
   });
 
@@ -508,13 +508,13 @@ io.on("connection", socket => {
     try {
       const clientId = socketClients.get(socket.id);
       if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) {
-        return callback?.({ ok: false, error: "Inicia sesión con Discord para usar amigos permanentes.", friends: [], incoming: [], outgoing: [] });
+        return callback?.({ ok: false, error: "Inicia sesión con Discord para usar amigos permanentes.", database: db.isMongoReady(), friends: [], incoming: [], outgoing: [] });
       }
       const state = await db.getFriendState(clientId);
       const decorate = item => ({ ...item, ...getContactMeta(item.clientId), online: Boolean(connectedClients.get(item.clientId)) });
       callback?.({ ok: true, database: db.isMongoReady(), friends: state.friends.map(decorate), incoming: state.incoming.map(decorate), outgoing: state.outgoing.map(decorate) });
     } catch (error) {
-      callback?.({ ok: false, error: error.message || "No se pudieron cargar tus amigos." });
+      callback?.({ ok: false, error: error.message || "No se pudieron cargar tus amigos.", database: db.isMongoReady(), friends: [], incoming: [], outgoing: [] });
     }
   });
 

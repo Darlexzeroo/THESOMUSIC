@@ -120,3 +120,9 @@ Puedes revisar la conexión visitando `/api/database/status`. Debe responder `co
 ## V81 · Cambio de cuenta y salas
 
 Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automáticamente la sala activa, limpia la interfaz de la sala y reconecta Socket.IO con la nueva identidad. Esto evita que el modo invitado conserve visualmente el usuario, rol o sala de la cuenta Discord anterior.
+
+
+## V82
+- Corrige el aviso falso de MongoDB desconectado.
+- El cliente verifica `/api/database/status` directamente.
+- Los errores de carga de amigos ya no se confunden con una caída de la base de datos.

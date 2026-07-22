@@ -41,7 +41,7 @@ let savedPrivateContacts = [];
 let persistentFriends = [];
 let incomingFriendRequests = [];
 let outgoingFriendRequests = [];
-let databaseConnected = false;
+let databaseConnected = null;
 const privateUnread = new Map();
 const privateMessageCache = new Map();
 let privateCallPeer = null;
@@ -286,7 +286,7 @@ function resetAccountScopedState() {
   persistentFriends = [];
   incomingFriendRequests = [];
   outgoingFriendRequests = [];
-  databaseConnected = false;
+  databaseConnected = null;
   privateUnread.clear();
   privateMessageCache.clear();
   resetPrivateChat();
@@ -662,21 +662,47 @@ function respondFriendRequest(requestId, accept) {
   });
 }
 
+async function refreshDatabaseStatus() {
+  if (activeLoginMode !== "discord") {
+    databaseConnected = null;
+    return null;
+  }
+  try {
+    const response = await fetch("/api/database/status", { cache: "no-store" });
+    const status = await response.json();
+    databaseConnected = status?.connected === true;
+  } catch (error) {
+    console.warn("No se pudo consultar el estado de MongoDB:", error);
+    // Un fallo de red del navegador no demuestra que MongoDB esté desconectado.
+    databaseConnected = null;
+  }
+  renderFriendsList();
+  return databaseConnected;
+}
+
 function loadFriendState() {
   if (!socket.connected || activeLoginMode !== "discord") {
     persistentFriends = [];
     incomingFriendRequests = [];
     outgoingFriendRequests = [];
+    databaseConnected = null;
     renderFriendsList();
     return;
   }
+
+  // Se consulta el endpoint real de estado para evitar mostrar un falso
+  // "MongoDB desconectado" cuando únicamente falla la carga de amigos.
+  refreshDatabaseStatus();
+
   socket.emit("friend-state", {}, response => {
+    if (typeof response?.database === "boolean") {
+      databaseConnected = response.database;
+    }
     if (!response?.ok) {
-      databaseConnected = Boolean(response?.database);
+      console.warn("No se pudo cargar el estado de amigos:", response?.error || "Error desconocido");
       renderFriendsList();
       return;
     }
-    databaseConnected = Boolean(response.database);
     persistentFriends = response.friends || [];
     incomingFriendRequests = response.incoming || [];
     outgoingFriendRequests = response.outgoing || [];
@@ -726,7 +752,11 @@ function renderFriendsList() {
 
   const loginHint = activeLoginMode !== "discord"
     ? '<p class="friends-empty">Inicia sesión con Discord para guardar amigos y conversaciones en MongoDB Atlas.</p>'
-    : (!databaseConnected ? '<p class="friends-empty">MongoDB Atlas no está conectado. Configura MONGODB_URI en Render.</p>' : "");
+    : (databaseConnected === false
+      ? '<p class="friends-empty">No se pudo conectar con MongoDB Atlas. Revisa los logs de Render.</p>'
+      : (databaseConnected === null
+        ? '<p class="friends-empty">Comprobando conexión con MongoDB Atlas…</p>'
+        : ""));
 
   $("friendsList").innerHTML = incomingHtml + outgoingHtml + friendsHtml + loginHint || '<p class="friends-empty">Aún no tienes amigos. Agrégalos desde una sala.</p>';
   $("friendsList").querySelectorAll("[data-friend-client]").forEach(button => button.addEventListener("click", () => openPrivateChatByClient(button.dataset.friendClient)));
