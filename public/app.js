@@ -251,12 +251,21 @@ function registerPersistentClient(callback) {
     return;
   }
 
-  socket.emit("register-client", {
+  socket.timeout(8000).emit("register-client", {
     clientId: persistentClientId,
     name: getName(),
     avatar: profilePhotoData,
     banner: profileBannerData
-  }, response => {
+  }, (error, response) => {
+    if (error) {
+      console.warn("El servidor tardó demasiado en registrar la cuenta.");
+      callback?.({ ok: false, error: "Tiempo de espera agotado al registrar la cuenta." });
+      return;
+    }
+    if (typeof response?.database === "boolean") {
+      databaseConnected = response.database;
+      renderFriendsList();
+    }
     if (!response?.ok) {
       console.warn("No se pudo registrar el cliente persistente:", response?.error || "Error desconocido");
     }
@@ -668,7 +677,11 @@ async function refreshDatabaseStatus() {
     return null;
   }
   try {
-    const response = await fetch("/api/database/status", { cache: "no-store" });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const response = await fetch("/api/database/status", { cache: "no-store", signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const status = await response.json();
     databaseConnected = status?.connected === true;
   } catch (error) {
@@ -694,7 +707,14 @@ function loadFriendState() {
   // "MongoDB desconectado" cuando únicamente falla la carga de amigos.
   refreshDatabaseStatus();
 
-  socket.emit("friend-state", {}, response => {
+  socket.timeout(8000).emit("friend-state", {}, (error, response) => {
+    if (error) {
+      console.warn("El servidor tardó demasiado en cargar amigos y solicitudes.");
+      // No dejamos la interfaz atrapada para siempre en “Comprobando…”.
+      if (databaseConnected === null) databaseConnected = true;
+      renderFriendsList();
+      return;
+    }
     if (typeof response?.database === "boolean") {
       databaseConnected = response.database;
     }
@@ -2666,6 +2686,7 @@ socket.on("connect", () => {
   // conversaciones e historial, evitando la carrera que impedía recibir mensajes
   // hasta que el destinatario enviaba uno.
   registerPersistentClient(() => {
+    loadFriendState();
     loadPrivateConversations();
     if (activePrivateClientId) {
       socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: activePrivateClientId }, response => {
@@ -2847,6 +2868,7 @@ socket.on("friend-request-received", request => {
   addFriendsNotification("Nueva solicitud de amistad", `${request.name || "Un usuario"} quiere agregarte.`, { clientId: request.clientId, icon: "👋" });
   notify(`${request.name || "Un usuario"} te envió una solicitud de amistad.`);
   loadFriendState();
+  loadPrivateConversations();
 });
 
 socket.on("friend-state-changed", ({ type } = {}) => {

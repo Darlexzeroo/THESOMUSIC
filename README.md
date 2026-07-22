@@ -126,3 +126,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Corrige el aviso falso de MongoDB desconectado.
 - El cliente verifica `/api/database/status` directamente.
 - Los errores de carga de amigos ya no se confunden con una caída de la base de datos.
+
+
+## V83 - Amigos y conversaciones
+- Evita que la interfaz quede atrapada en “Comprobando conexión”.
+- Carga amigos y solicitudes después de registrar el socket.
+- Añade tiempos de espera y reintentos seguros.
+- Actualiza conversaciones al recibir solicitudes.
