@@ -264,6 +264,38 @@ function registerPersistentClient(callback) {
   });
 }
 
+// Limpia toda la información que pertenece a la cuenta anterior. Los amigos,
+// solicitudes, conversaciones y contadores de Discord nunca deben heredarse
+// por una sesión de invitado (ni al revés).
+function resetAccountScopedState() {
+  savedPrivateContacts = [];
+  persistentFriends = [];
+  incomingFriendRequests = [];
+  outgoingFriendRequests = [];
+  databaseConnected = false;
+  privateUnread.clear();
+  privateMessageCache.clear();
+  resetPrivateChat();
+  updatePrivateUnreadBadge();
+  renderFriendsList();
+}
+
+// La identidad autenticada se determina durante el handshake de Socket.IO.
+// Cuando se cambia entre Discord e invitado hay que abrir una conexión nueva
+// para que el servidor vuelva a leer la cookie de sesión actual.
+function registerIdentityAfterAccountSwitch(previousMode) {
+  const changedAccountType = Boolean(previousMode && previousMode !== activeLoginMode);
+  if (changedAccountType && socket.connected) {
+    socket.disconnect();
+    socket.connect();
+    return;
+  }
+  registerPersistentClient(() => {
+    loadFriendState();
+    loadPrivateConversations();
+  });
+}
+
 function applyAvatar(element, name = getName(), avatar = profilePhotoData) {
   if (!element) return;
   element.textContent = avatar ? "" : (name[0]?.toUpperCase() || "?");
@@ -717,12 +749,15 @@ function loadPrivateConversations(callback) {
       return;
     }
 
-    const existing = new Map(savedPrivateContacts.map(contact => [contact.clientId, contact]));
+    // La respuesta corresponde exclusivamente a la identidad actualmente
+    // registrada. Se reemplaza la lista completa para no mezclar contactos de
+    // una cuenta Discord anterior con los contactos temporales del invitado.
+    const currentContacts = new Map();
     (response.contacts || []).forEach(contact => {
       if (!contact?.clientId || contact.clientId === persistentClientId) return;
-      existing.set(contact.clientId, { ...(existing.get(contact.clientId) || {}), ...contact });
+      currentContacts.set(contact.clientId, { ...contact });
     });
-    savedPrivateContacts = [...existing.values()];
+    savedPrivateContacts = [...currentContacts.values()];
     renderFriendsList();
     callback?.(response);
   });
@@ -3269,6 +3304,8 @@ function saveGuestProfile() {
 }
 
 function applyGuestProfile(name) {
+  const previousMode = activeLoginMode;
+  resetAccountScopedState();
   activeLoginMode = "guest";
   persistentClientId = browserGuestClientId;
   discordAuthenticatedUser = null;
@@ -3284,11 +3321,13 @@ function applyGuestProfile(name) {
   if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
   else localStorage.removeItem("waveroom-banner");
   refreshProfileUI();
-  registerPersistentClient();
+  registerIdentityAfterAccountSwitch(previousMode);
   setLoginGateVisible(false);
 }
 
 function applyDiscordProfile(user) {
+  const previousMode = activeLoginMode;
+  resetAccountScopedState();
   activeLoginMode = "discord";
   persistentClientId = `discord_${String(user.id || "").replace(/[^0-9]/g, "")}`;
   discordAuthenticatedUser = user;
@@ -3307,7 +3346,7 @@ function applyDiscordProfile(user) {
   if (profileBannerData) localStorage.setItem("waveroom-banner", profileBannerData);
   else localStorage.removeItem("waveroom-banner");
   refreshProfileUI();
-  registerPersistentClient();
+  registerIdentityAfterAccountSwitch(previousMode);
   if (currentRoom) socket.emit("update-profile", { code: currentRoom.code, ...getProfile() });
   setLoginGateVisible(false);
 }
@@ -3380,9 +3419,17 @@ $("guestLoginForm")?.addEventListener("submit", event => {
 $("discordLogoutButton")?.addEventListener("click", async () => {
   try {
     await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
+    resetAccountScopedState();
     discordAuthenticatedUser = null;
     activeLoginMode = null;
+    persistentClientId = browserGuestClientId;
     localStorage.removeItem(LOGIN_MODE_KEY);
+    // El socket abierto todavía fue autenticado con la cookie anterior. Se
+    // reconecta ahora para que el servidor deje de tratarlo como Discord.
+    if (socket.connected) {
+      socket.disconnect();
+      socket.connect();
+    }
     updateDiscordCard();
     closeProfileModal();
     setLoginGateVisible(true, "Sesión cerrada. Elige cómo quieres entrar.");

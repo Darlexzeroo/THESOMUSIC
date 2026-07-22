@@ -1,8 +1,8 @@
 {
   "name": "waveroom-youtube",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "THESO con salas, Discord, amigos y chats privados persistentes en MongoDB Atlas",
+  "description": "THESO V80 con MongoDB Atlas y separación segura entre cuentas Discord e invitado",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

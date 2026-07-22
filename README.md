@@ -107,3 +107,12 @@ YOUTUBE_API_KEY=...
 ```
 
 Puedes revisar la conexión visitando `/api/database/status`. Debe responder `connected: true`.
+
+
+## V80 - Separación de cuentas Discord e invitado
+
+- Amigos, solicitudes y conversaciones de Discord se limpian al cambiar de cuenta.
+- El invitado ya no hereda contactos guardados de una cuenta Discord.
+- Al volver a Discord, amigos y chats se cargan nuevamente desde MongoDB Atlas.
+- Socket.IO se reconecta después de cerrar sesión para actualizar la identidad del servidor.
+- La lista de conversaciones se reemplaza por cuenta en vez de mezclar datos anteriores.
