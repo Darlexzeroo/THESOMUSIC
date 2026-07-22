@@ -331,6 +331,19 @@ function safeClientId(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
 }
 function persistentChatKey(a, b) { return [safeClientId(a), safeClientId(b)].sort().join(":"); }
+function getPresence(clientId) {
+  const live = connectedClients.get(clientId);
+  if (!live) return { online: false, presence: "offline", presenceLabel: "Sin conexión" };
+  for (const [code, room] of rooms.entries()) {
+    const member = [...room.users.values()].find(user => user.clientId === clientId);
+    if (!member) continue;
+    if (room.video?.provider === "twitch") return { online: true, presence: "twitch", presenceLabel: "Viendo Twitch", roomCode: code };
+    if (room.video) return { online: true, presence: "music", presenceLabel: "Escuchando música", roomCode: code };
+    return { online: true, presence: "room", presenceLabel: "En una sala", roomCode: code };
+  }
+  const away = Date.now() - Number(live.lastActiveAt || Date.now()) > 5 * 60 * 1000;
+  return { online: true, presence: away ? "away" : "online", presenceLabel: away ? "Ausente" : "En línea" };
+}
 function getContactMeta(clientId) {
   const live = connectedClients.get(clientId);
   const saved = persistentPrivateChats.__contacts?.[clientId] || {};
@@ -340,9 +353,16 @@ function getContactMeta(clientId) {
     name: live?.name || saved.name || "Usuario",
     avatar: live?.avatar || saved.avatar || "",
     banner: live?.banner || saved.banner || "",
-    online: Boolean(live)
+    ...getPresence(clientId)
   };
 }
+function broadcastPresence(clientId) {
+  if (!clientId) return;
+  io.emit("presence-changed", getContactMeta(clientId));
+}
+setInterval(() => {
+  for (const clientId of connectedClients.keys()) broadcastPresence(clientId);
+}, 60 * 1000).unref();
 function rememberContact(clientId, name, avatar, banner = "") {
   if (!clientId) return;
   persistentPrivateChats.__contacts ||= {};
@@ -434,7 +454,10 @@ function broadcastRoomDirectory() {
 
 function emitRoom(code) {
   const room = rooms.get(code);
-  if (room) io.to(code).emit("room-state", publicRoom(code, room));
+  if (room) {
+    io.to(code).emit("room-state", publicRoom(code, room));
+    [...room.users.values()].forEach(user => broadcastPresence(user.clientId));
+  }
   broadcastRoomDirectory();
 }
 
@@ -480,6 +503,7 @@ io.on("connection", socket => {
         socket.leave(`client:${previousClientId}`);
         const previousProfile = connectedClients.get(previousClientId);
         if (previousProfile?.socketId === socket.id) connectedClients.delete(previousClientId);
+        broadcastPresence(previousClientId);
       }
 
       const profile = {
@@ -487,7 +511,8 @@ io.on("connection", socket => {
         name: String(name || discordSession?.displayName || "Usuario").trim().slice(0, 30),
         avatar: String(avatar || discordSession?.avatar || "").slice(0, 3 * 1024 * 1024),
         banner: String(banner || "").slice(0, 3 * 1024 * 1024),
-        authenticated: Boolean(authenticatedIdentityId)
+        authenticated: Boolean(authenticatedIdentityId),
+        lastActiveAt: Date.now()
       };
       connectedClients.set(clientId, profile);
       socketClients.set(socket.id, clientId);
@@ -498,9 +523,20 @@ io.on("connection", socket => {
         await db.upsertDiscordUser(clientId, discordSession, profile);
       }
       callback?.({ ok: true, clientId, authenticated: Boolean(authenticatedIdentityId), database: db.isMongoReady() });
+      broadcastPresence(clientId);
     } catch (error) {
       console.error("Error registrando cliente:", error);
       callback?.({ ok: false, error: "No se pudo registrar tu cuenta.", database: db.isMongoReady() });
+    }
+  });
+
+  socket.on("presence-activity", () => {
+    const clientId = socketClients.get(socket.id);
+    const profile = connectedClients.get(clientId);
+    if (profile) {
+      profile.lastActiveAt = Date.now();
+      connectedClients.set(clientId, profile);
+      broadcastPresence(clientId);
     }
   });
 
@@ -511,7 +547,7 @@ io.on("connection", socket => {
         return callback?.({ ok: false, error: "Inicia sesión con Discord para usar amigos permanentes.", database: db.isMongoReady(), friends: [], incoming: [], outgoing: [] });
       }
       const state = await db.getFriendState(clientId);
-      const decorate = item => ({ ...item, ...getContactMeta(item.clientId), online: Boolean(connectedClients.get(item.clientId)) });
+      const decorate = item => ({ ...item, ...getContactMeta(item.clientId) });
       callback?.({ ok: true, database: db.isMongoReady(), friends: state.friends.map(decorate), incoming: state.incoming.map(decorate), outgoing: state.outgoing.map(decorate) });
     } catch (error) {
       callback?.({ ok: false, error: error.message || "No se pudieron cargar tus amigos.", database: db.isMongoReady(), friends: [], incoming: [], outgoing: [] });
@@ -590,7 +626,7 @@ io.on("connection", socket => {
     }
   });
 
-  socket.on("private-chat-global", async ({ targetClientId, text, image } = {}, callback) => {
+  socket.on("private-chat-global", async ({ targetClientId, text, image, replyToId } = {}, callback) => {
     try {
       const clientId = socketClients.get(socket.id);
       targetClientId = safeClientId(targetClientId);
@@ -604,7 +640,7 @@ io.on("connection", socket => {
       let message;
       if (db.isMongoReady()) {
         if (!(await db.areFriends(clientId, targetClientId))) return callback?.({ ok: false, error: "Primero deben aceptar la solicitud de amistad." });
-        message = await db.saveMessage(clientId, targetClientId, text, image, senderMeta.name);
+        message = await db.saveMessage(clientId, targetClientId, text, image, senderMeta.name, replyToId);
       } else {
         return callback?.({ ok: false, error: "MongoDB Atlas no está disponible." });
       }
@@ -616,6 +652,61 @@ io.on("connection", socket => {
       callback?.({ ok: false, error: error.message || "No se pudo enviar el mensaje." });
     }
   });
+  socket.on("private-typing", ({ targetClientId, typing } = {}) => {
+    const clientId = socketClients.get(socket.id);
+    targetClientId = safeClientId(targetClientId);
+    if (!authenticatedIdentityId || clientId !== authenticatedIdentityId || !targetClientId.startsWith("discord_")) return;
+    io.to(`client:${targetClientId}`).emit("private-typing", { fromClientId: clientId, typing: Boolean(typing) });
+  });
+
+  socket.on("private-message-read", async ({ targetClientId } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) throw new Error("Sesión no válida.");
+      await db.markConversationRead(clientId, targetClientId);
+      io.to(`client:${targetClientId}`).emit("private-messages-read", { byClientId: clientId, at: Date.now() });
+      callback?.({ ok: true });
+    } catch (error) { callback?.({ ok: false, error: error.message }); }
+  });
+
+  socket.on("private-message-edit", async ({ targetClientId, messageId, text } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) throw new Error("Sesión no válida.");
+      const message = await db.editMessage(clientId, String(messageId || ""), text);
+      message.author = getContactMeta(clientId).name;
+      io.to(`client:${targetClientId}`).emit("private-message-updated", message);
+      socket.emit("private-message-updated", message);
+      callback?.({ ok: true, message });
+    } catch (error) { callback?.({ ok: false, error: error.message || "No se pudo editar." }); }
+  });
+
+  socket.on("private-message-delete", async ({ targetClientId, messageId } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) throw new Error("Sesión no válida.");
+      const message = await db.deleteMessage(clientId, String(messageId || ""));
+      io.to(`client:${targetClientId}`).emit("private-message-updated", message);
+      socket.emit("private-message-updated", message);
+      callback?.({ ok: true });
+    } catch (error) { callback?.({ ok: false, error: error.message || "No se pudo eliminar." }); }
+  });
+
+  socket.on("private-message-react", async ({ targetClientId, messageId, emoji } = {}, callback) => {
+    try {
+      const clientId = socketClients.get(socket.id);
+      targetClientId = safeClientId(targetClientId);
+      if (!authenticatedIdentityId || clientId !== authenticatedIdentityId) throw new Error("Sesión no válida.");
+      const message = await db.toggleReaction(clientId, String(messageId || ""), emoji);
+      io.to(`client:${targetClientId}`).emit("private-message-updated", message);
+      socket.emit("private-message-updated", message);
+      callback?.({ ok: true });
+    } catch (error) { callback?.({ ok: false, error: error.message || "No se pudo reaccionar." }); }
+  });
+
   socket.on("room-invite", ({ targetClientId, code } = {}, callback) => {
     const senderClientId = safeClientId(socketClients.get(socket.id));
     targetClientId = safeClientId(targetClientId);

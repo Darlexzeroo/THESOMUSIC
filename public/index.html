@@ -231,14 +231,14 @@
       </header>
       <div class="friends-layout">
         <aside class="friends-list-panel">
-          <div class="friends-list-title"><strong>Conversaciones</strong><span id="friendsCount">0</span></div>
+          <div class="friends-list-title"><strong>Conversaciones</strong><span id="friendsCount">0</span></div><div class="private-search-wrap"><input id="privateChatSearch" type="search" placeholder="Buscar en el chat..." aria-label="Buscar mensajes"></div>
           <div id="friendsList" class="friends-list"><p class="friends-empty">Entra a una sala para ver a tus amigos.</p></div>
         </aside>
         <main class="private-chat-panel">
           <div id="privateChatEmpty" class="private-chat-empty"><b>💬</b><h3>Selecciona una persona</h3><p>Los mensajes privados solo los podrán ver ustedes dos.</p></div>
           <div id="privateChatActive" class="private-chat-active hidden">
             <header class="private-chat-header"><div id="privateChatAvatar" class="person-icon">?</div><div class="private-chat-title"><strong id="privateChatName">Usuario</strong><small id="privateCallStatus">Chat privado</small></div><div class="private-call-actions"><button id="inviteToRoomBtn" type="button" title="Invitar a tu sala">✉ Invitar</button><button id="privateCallBtn" type="button" title="Llamar en privado">📞 Llamar</button><button id="privateHangupBtn" type="button" class="hidden">Colgar</button></div></header><div id="incomingPrivateCall" class="incoming-call hidden"><span id="incomingPrivateCallText">Llamada privada entrante</span><div><button id="acceptPrivateCall" type="button">Aceptar</button><button id="rejectPrivateCall" type="button">Rechazar</button></div></div>
-            <div id="privateMessages" class="private-messages"></div>
+            <div id="privateTypingIndicator" class="private-typing hidden">Escribiendo…</div><div id="privateMessages" class="private-messages"></div><div id="privateReplyBar" class="private-reply-bar hidden"><span><b>Respondiendo a</b><small id="privateReplyPreview"></small></span><button id="cancelPrivateReply" type="button">×</button></div>
             <div class="private-compose"><button id="privateEmojiBtn" class="emoji-btn" type="button" title="Emotes">😊</button><button id="privateImageBtn" class="image-btn" type="button" title="Enviar imagen">📎</button><input id="privateImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><div id="privateEmojiPicker" class="emoji-picker hidden"></div><form id="privateChatForm" class="private-chat-form"><input id="privateChatInput" maxlength="400" placeholder="Escribe un mensaje privado..."><button type="submit">➤</button></form></div>
           </div>
         </main>

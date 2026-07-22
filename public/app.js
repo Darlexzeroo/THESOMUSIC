@@ -44,6 +44,10 @@ let outgoingFriendRequests = [];
 let databaseConnected = null;
 const privateUnread = new Map();
 const privateMessageCache = new Map();
+let privateReplyTarget = null;
+let privateSearchTerm = "";
+let privateTypingTimer = null;
+let privateTypingSent = false;
 let privateCallPeer = null;
 let privateCallTargetId = null;
 let incomingPrivateCallerId = null;
@@ -797,7 +801,7 @@ function renderFriendsList() {
     const selected = activePrivateClientId === user.clientId;
     return `<button class="friend-row${selected ? " active" : ""}" type="button" data-friend-client="${escapeHtml(user.clientId)}">
       <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>
-      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small>${user.inRoom ? (user.host ? "Anfitrión · En la sala" : "En la sala") : (user.online ? "En línea" : "Sin conexión")}</small></span>
+      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small><i class="presence-dot ${escapeHtml(user.presence || (user.online ? "online" : "offline"))}"></i>${escapeHtml(user.inRoom ? (user.host ? "Anfitrión · En una sala" : (user.presenceLabel || "En una sala")) : (user.presenceLabel || (user.online ? "En línea" : "Sin conexión")))}</small></span>
       ${unread ? `<b class="friend-unread">${unread > 99 ? "99+" : unread}</b>` : ""}
     </button>`;
   }).join("")}</section>` : "";
@@ -868,15 +872,66 @@ function loadPrivateConversations(callback) {
   });
 }
 
+function formatPrivateDay(value) {
+  const date = new Date(value || Date.now());
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Hoy";
+  if (date.toDateString() === yesterday.toDateString()) return "Ayer";
+  return date.toLocaleDateString([], { day: "2-digit", month: "long", year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined });
+}
+
+function setPrivateReply(message) {
+  privateReplyTarget = message || null;
+  const bar = $("privateReplyBar");
+  if (!bar) return;
+  bar.classList.toggle("hidden", !privateReplyTarget);
+  $("privateReplyPreview").textContent = privateReplyTarget ? (privateReplyTarget.text || (privateReplyTarget.image ? "Imagen" : "Mensaje")) : "";
+  if (privateReplyTarget) $("privateChatInput").focus();
+}
+
+function updateCachedPrivateMessage(message) {
+  if (!message?.id) return;
+  const otherId = message.fromClientId === persistentClientId ? message.toClientId : message.fromClientId;
+  const list = privateMessageCache.get(otherId) || [];
+  const index = list.findIndex(item => item.id === message.id);
+  if (index >= 0) list[index] = { ...list[index], ...message };
+  else list.push(message);
+  privateMessageCache.set(otherId, list);
+  if (activePrivateClientId === otherId) renderPrivateMessages(list);
+}
+
 function renderPrivateMessages(messages = []) {
   const box = $("privateMessages");
-  box.innerHTML = messages.length ? messages.map(message => {
+  const term = privateSearchTerm.trim().toLowerCase();
+  const filtered = term ? messages.filter(message => String(message.text || "").toLowerCase().includes(term)) : messages;
+  let lastDay = "";
+  box.innerHTML = filtered.length ? filtered.map(message => {
     const mine = message.fromClientId ? message.fromClientId === persistentClientId : message.from === mySocketId;
     const time = new Date(message.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    return `<div class="private-message ${mine ? "mine" : "theirs"}">${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}<small>${time}</small></div>`;
-  }).join("") : '<p class="private-chat-hint">Todavía no hay mensajes. Envía el primero.</p>';
+    const day = formatPrivateDay(message.createdAt);
+    const separator = day !== lastDay ? `<div class="private-day-separator"><span>${escapeHtml(day)}</span></div>` : "";
+    lastDay = day;
+    const reply = message.replyTo ? `<div class="private-reply-quote"><b>${message.replyTo.fromClientId === persistentClientId ? "Tú" : "Mensaje"}</b><span>${escapeHtml(message.replyTo.text || "Mensaje")}</span></div>` : "";
+    const reactions = Object.entries(message.reactions || {}).map(([emoji, users]) => `<button type="button" class="private-reaction${(users || []).includes(persistentClientId) ? " mine" : ""}" data-react-message="${escapeHtml(message.id)}" data-react-emoji="${escapeHtml(emoji)}">${escapeHtml(emoji)} <b>${(users || []).length}</b></button>`).join("");
+    const body = message.deletedAt ? '<p class="private-message-deleted">Mensaje eliminado</p>' : `${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
+    const actions = message.deletedAt ? "" : `<div class="private-message-actions"><button type="button" data-reply-message="${escapeHtml(message.id)}" title="Responder">↩</button><button type="button" data-quick-react="${escapeHtml(message.id)}" title="Reaccionar">😊</button>${mine ? `<button type="button" data-edit-message="${escapeHtml(message.id)}" title="Editar">✎</button><button type="button" data-delete-message="${escapeHtml(message.id)}" title="Eliminar">🗑</button>` : ""}</div>`;
+    const receipt = mine ? `<span class="message-receipt">${message.readAt ? "✓✓ Leído" : "✓ Enviado"}</span>` : "";
+    return `${separator}<div class="private-message ${mine ? "mine" : "theirs"}" data-message-id="${escapeHtml(message.id || "")}">${reply}${body}<div class="private-message-meta"><small>${time}${message.editedAt ? " · editado" : ""}</small>${receipt}</div>${reactions ? `<div class="private-reactions">${reactions}</div>` : ""}${actions}</div>`;
+  }).join("") : `<p class="private-chat-hint">${term ? "No se encontraron mensajes." : "Todavía no hay mensajes. Envía el primero."}</p>`;
   bindChatImages(box);
-  box.scrollTop = box.scrollHeight;
+  box.querySelectorAll("[data-reply-message]").forEach(button => button.onclick = () => setPrivateReply(messages.find(m => m.id === button.dataset.replyMessage)));
+  box.querySelectorAll("[data-quick-react]").forEach(button => button.onclick = () => socket.emit("private-message-react", { targetClientId: activePrivateClientId, messageId: button.dataset.quickReact, emoji: "❤️" }));
+  box.querySelectorAll("[data-react-message]").forEach(button => button.onclick = () => socket.emit("private-message-react", { targetClientId: activePrivateClientId, messageId: button.dataset.reactMessage, emoji: button.dataset.reactEmoji }));
+  box.querySelectorAll("[data-edit-message]").forEach(button => button.onclick = () => {
+    const message = messages.find(m => m.id === button.dataset.editMessage);
+    const text = prompt("Editar mensaje:", message?.text || "");
+    if (text !== null && text.trim()) socket.emit("private-message-edit", { targetClientId: activePrivateClientId, messageId: button.dataset.editMessage, text }, response => { if (!response?.ok) notify(response?.error || "No se pudo editar."); });
+  });
+  box.querySelectorAll("[data-delete-message]").forEach(button => button.onclick = () => {
+    if (confirm("¿Eliminar este mensaje?")) socket.emit("private-message-delete", { targetClientId: activePrivateClientId, messageId: button.dataset.deleteMessage }, response => { if (!response?.ok) notify(response?.error || "No se pudo eliminar."); });
+  });
+  if (!term) box.scrollTop = box.scrollHeight;
 }
 
 function openPrivateChatByClient(clientId) {
@@ -912,6 +967,7 @@ function openPrivateChatByClient(clientId) {
     if (!response?.ok || activePrivateClientId !== clientId) return;
     const messages = mergePrivateMessages(clientId, response.messages || []);
     renderPrivateMessages(messages);
+    socket.emit("private-message-read", { targetClientId: clientId });
     $("privateChatInput").focus();
   });
 }
@@ -927,6 +983,11 @@ function resetPrivateChat() {
   $("privateChatEmpty").classList.remove("hidden");
   $("privateChatActive").classList.add("hidden");
   $("privateMessages").innerHTML = "";
+  privateSearchTerm = "";
+  privateReplyTarget = null;
+  if ($("privateChatSearch")) $("privateChatSearch").value = "";
+  $("privateReplyBar")?.classList.add("hidden");
+  $("privateTypingIndicator")?.classList.add("hidden");
   renderFriendsList();
 }
 
@@ -2604,15 +2665,36 @@ $("privateChatForm").addEventListener("submit", event => {
   const text = input.value.trim();
   if (!text) return;
   const targetClientId = activePrivateClientId;
-  socket.emit("private-chat-global", { clientId: persistentClientId, targetClientId, text }, response => {
+  socket.emit("private-chat-global", { clientId: persistentClientId, targetClientId, text, replyToId: privateReplyTarget?.id || null }, response => {
     if (!response?.ok) return notify(response?.error || "No se pudo enviar el mensaje privado.");
     input.value = "";
+    setPrivateReply(null);
+    socket.emit("private-typing", { targetClientId, typing: false });
+    privateTypingSent = false;
     // Refresca inmediatamente el historial del remitente, incluso si el evento
     // de Socket.IO tarda unos milisegundos o la conexión acaba de recuperarse.
     socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId }, history => {
       if (history?.ok && activePrivateClientId === targetClientId) renderPrivateMessages(history.messages || []);
     });
   });
+});
+
+$("cancelPrivateReply")?.addEventListener("click", () => setPrivateReply(null));
+$("privateChatSearch")?.addEventListener("input", event => {
+  privateSearchTerm = event.target.value || "";
+  renderPrivateMessages(privateMessageCache.get(activePrivateClientId) || []);
+});
+$("privateChatInput")?.addEventListener("input", () => {
+  if (!activePrivateClientId || activeLoginMode !== "discord") return;
+  if (!privateTypingSent) {
+    privateTypingSent = true;
+    socket.emit("private-typing", { targetClientId: activePrivateClientId, typing: true });
+  }
+  clearTimeout(privateTypingTimer);
+  privateTypingTimer = setTimeout(() => {
+    privateTypingSent = false;
+    socket.emit("private-typing", { targetClientId: activePrivateClientId, typing: false });
+  }, 1200);
 });
 
 $("openProfile").addEventListener("click", openProfileModal);
@@ -2960,6 +3042,9 @@ socket.on("private-chat-global", message => {
   // Se pinta directamente desde el mensaje recibido, sin esperar otra escritura
   // ni una segunda consulta al servidor. Después se sincroniza el historial.
   if (privateChatIsOpen) {
+    privateUnread.delete(otherClientId);
+    updatePrivateUnreadBadge();
+    socket.emit("private-message-read", { targetClientId: otherClientId });
     renderPrivateMessages(messages);
     socket.emit("private-chat-history-global", { clientId: persistentClientId, targetClientId: otherClientId }, response => {
       if (!response?.ok || activePrivateClientId !== otherClientId) return;
@@ -2970,6 +3055,28 @@ socket.on("private-chat-global", message => {
 });
 
 socket.on("chat", addMessage);
+socket.on("presence-changed", contact => {
+  if (!contact?.clientId || activeLoginMode !== "discord") return;
+  const apply = list => list.map(item => item.clientId === contact.clientId ? { ...item, ...contact } : item);
+  persistentFriends = apply(persistentFriends);
+  savedPrivateContacts = apply(savedPrivateContacts);
+  renderFriendsList();
+  if (activePrivateClientId === contact.clientId) $("privateCallStatus").textContent = contact.presenceLabel || "Chat privado";
+});
+
+socket.on("private-typing", ({ fromClientId, typing } = {}) => {
+  if (fromClientId !== activePrivateClientId) return;
+  $("privateTypingIndicator")?.classList.toggle("hidden", !typing);
+});
+
+socket.on("private-message-updated", message => updateCachedPrivateMessage(message));
+socket.on("private-messages-read", ({ byClientId, at } = {}) => {
+  const list = privateMessageCache.get(byClientId) || [];
+  list.forEach(message => { if (message.fromClientId === persistentClientId && !message.readAt) message.readAt = at || Date.now(); });
+  privateMessageCache.set(byClientId, list);
+  if (activePrivateClientId === byClientId) renderPrivateMessages(list);
+});
+
 socket.on("system-message", text => addMessage({ text }));
 socket.on("became-host", () => notify("Ahora eres el anfitrión."));
 
@@ -3597,3 +3704,14 @@ $("discordLogoutButton")?.addEventListener("click", async () => {
   loadDiscordSession();
 })();
 
+
+// Presencia: actividad del usuario con límite para no saturar Socket.IO.
+let lastPresenceActivitySent = 0;
+function reportPresenceActivity() {
+  if (!socket.connected || activeLoginMode !== "discord") return;
+  const now = Date.now();
+  if (now - lastPresenceActivitySent < 30000) return;
+  lastPresenceActivitySent = now;
+  socket.emit("presence-activity");
+}
+["mousemove", "keydown", "click", "touchstart"].forEach(eventName => document.addEventListener(eventName, reportPresenceActivity, { passive: true }));

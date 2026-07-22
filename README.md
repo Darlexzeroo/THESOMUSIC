@@ -1,3 +1,20 @@
+# THESO V89 — Estados y chat privado avanzado
+
+Esta versión agrega estados de presencia y nuevas funciones persistentes en los chats privados.
+
+## Novedades
+
+- Estados: En línea, Ausente, En una sala, Escuchando música y Viendo Twitch.
+- Responder mensajes.
+- Reacciones rápidas.
+- Editar y eliminar mensajes propios.
+- Indicador “Escribiendo…”.
+- Confirmación de mensajes leídos.
+- Separadores de fecha por día.
+- Búsqueda dentro del chat abierto.
+
+Los cambios de mensajes, reacciones y lecturas se guardan en MongoDB Atlas. Los invitados continúan limitados al chat de las salas.
+
 # THESO V55
 
 Cambios principales:

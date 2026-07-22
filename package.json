@@ -1,8 +1,8 @@
 {
   "name": "waveroom-youtube",
-  "version": "88.0.0",
+  "version": "89.0.0",
   "private": true,
-  "description": "THESO V80 con MongoDB Atlas y separación segura entre cuentas Discord e invitado",
+  "description": "THESO V89 con estados de usuario y chat privado avanzado",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
