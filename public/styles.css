@@ -3392,3 +3392,22 @@ body.player-dock-hidden .app-layout{grid-template-rows:1fr 0!important}
 @media(max-width:820px){
   body.player-dock-hidden .app-layout{padding-bottom:0!important}
 }
+
+/* V87 · Evita el parpadeo de la pantalla de login al restaurar sesión */
+body.auth-pending { overflow: hidden; }
+body.auth-pending > *:not(.auth-boot-splash):not(script) { visibility: hidden !important; }
+.auth-boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: none;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  background: #03050e;
+  color: var(--text, #f4f7ff);
+}
+body.auth-pending .auth-boot-splash { display: grid; }
+.auth-boot-logo { display:flex; align-items:center; gap:10px; font-size:28px; letter-spacing:.08em; }
+.auth-boot-logo span { color: var(--accent, #08e6ef); }
+.auth-boot-splash small { color: var(--muted, #9aa3b6); }

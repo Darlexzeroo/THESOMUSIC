@@ -3394,6 +3394,10 @@ function saveDiscordProfile() {
 function setLoginGateVisible(visible, message = "") {
   const gate = $("loginGate");
   if (!gate) return;
+  // La interfaz inicia en modo auth-pending. Solo se revela cuando el servidor
+  // confirma si existe una sesión de Discord o debe mostrarse el acceso.
+  document.body.classList.remove("auth-pending");
+  $("authBootSplash")?.remove();
   gate.classList.toggle("hidden", !visible);
   document.body.classList.toggle("auth-gated", visible);
   const status = $("loginGateStatus");
