@@ -337,8 +337,14 @@ function getPresence(clientId) {
   for (const [code, room] of rooms.entries()) {
     const member = [...room.users.values()].find(user => user.clientId === clientId);
     if (!member) continue;
-    if (room.video?.provider === "twitch") return { online: true, presence: "twitch", presenceLabel: "Viendo Twitch", roomCode: code };
-    if (room.video) return { online: true, presence: "music", presenceLabel: "Escuchando música", roomCode: code };
+    // Prioriza el estado que reporta el reproductor real de este usuario.
+    // Como respaldo, usa el estado sincronizado de la sala para que los amigos
+    // vean la actividad incluso mientras el iframe termina de cargar.
+    const playbackPresence = live.playbackPresence;
+    if (playbackPresence === "twitch") return { online: true, presence: "twitch", presenceLabel: "Viendo Twitch", roomCode: code };
+    if (playbackPresence === "music") return { online: true, presence: "music", presenceLabel: "Escuchando música", roomCode: code };
+    if (room.playing && room.video?.provider === "twitch") return { online: true, presence: "twitch", presenceLabel: "Viendo Twitch", roomCode: code };
+    if (room.playing && room.video) return { online: true, presence: "music", presenceLabel: "Escuchando música", roomCode: code };
     return { online: true, presence: "room", presenceLabel: "En una sala", roomCode: code };
   }
   const away = Date.now() - Number(live.lastActiveAt || Date.now()) > 5 * 60 * 1000;
@@ -528,6 +534,18 @@ io.on("connection", socket => {
       console.error("Error registrando cliente:", error);
       callback?.({ ok: false, error: "No se pudo registrar tu cuenta.", database: db.isMongoReady() });
     }
+  });
+
+  socket.on("presence-playback", ({ type } = {}) => {
+    const live = connectedClients.get(socket.data.clientId);
+    if (!live) return;
+
+    // Solo se aceptan estados conocidos y únicamente mientras el socket está
+    // dentro de una sala. Así un cliente no puede fingir actividad permanente.
+    const inRoom = [...rooms.values()].some(room => room.users.has(socket.id));
+    live.playbackPresence = inRoom && ["music", "twitch"].includes(type) ? type : null;
+    live.lastActiveAt = Date.now();
+    broadcastPresence(socket.data.clientId);
   });
 
   socket.on("presence-activity", () => {
@@ -809,6 +827,8 @@ io.on("connection", socket => {
       room.voiceUsers?.delete(socket.id);
       room.users.delete(socket.id);
       socket.leave(code);
+      const live = connectedClients.get(socket.data.clientId);
+      if (live) live.playbackPresence = null;
 
       if (room.users.size === 0) {
         rooms.delete(code);

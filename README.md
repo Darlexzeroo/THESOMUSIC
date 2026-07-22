@@ -172,3 +172,12 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - El login inicia oculto desde el HTML.
 - CSS crítico inline evita que el formulario se pinte antes de cargar la hoja de estilos.
 - La comprobación de sesión conserva la pantalla de arranque y solo muestra el login cuando el servidor confirma que no hay sesión.
+
+
+## V90 - Estados de reproducción corregidos
+
+- El estado se actualiza cuando YouTube realmente entra en reproducción.
+- Twitch reporta `Viendo Twitch` cuando el directo está activo.
+- Al pausar, terminar o salir de la sala vuelve a `En una sala` o `En línea`.
+- Estados con iconos y colores en la lista de amigos.
+- Se eliminaron las confirmaciones visuales `Enviado` y `Leído`.

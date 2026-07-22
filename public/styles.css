@@ -3440,7 +3440,6 @@ body.auth-pending .auth-boot-splash { display: grid; }
 .private-reply-quote span { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .private-message-meta { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 5px; }
 .private-message.theirs .private-message-meta { justify-content: flex-start; }
-.message-receipt { font-size: 10px; color: #7dd3fc; }
 .private-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .private-reaction { border: 1px solid rgba(148,163,184,.22); background: rgba(12,20,34,.75); color: #e2e8f0; border-radius: 999px; padding: 2px 7px; cursor: pointer; font-size: 12px; }
 .private-reaction.mine { border-color: rgba(0,217,245,.65); background: rgba(0,217,245,.12); }
@@ -3448,3 +3447,13 @@ body.auth-pending .auth-boot-splash { display: grid; }
 @media (max-width: 760px) {
   .private-message-actions { opacity: 1; transform: none; position: static; width: max-content; margin-top: 6px; pointer-events: auto; }
 }
+
+/* V90: estados claros con iconos y color por actividad */
+.presence-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.presence-icon { width: 16px; text-align: center; filter: saturate(1.15); }
+.presence-online { color: #56d99f; }
+.presence-away { color: #f6c65b; }
+.presence-music { color: #4de3f5; }
+.presence-twitch { color: #b48cff; }
+.presence-room { color: #a78bfa; }
+.presence-offline { color: #8b93a7; }

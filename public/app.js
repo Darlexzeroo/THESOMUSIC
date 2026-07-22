@@ -764,6 +764,20 @@ function loadFriendState() {
   });
 }
 
+function presenceDisplay(user = {}) {
+  const presence = user.presence || (user.online ? "online" : "offline");
+  const states = {
+    online: { icon: "🟢", label: "En línea" },
+    away: { icon: "🌙", label: "Ausente" },
+    music: { icon: "🎵", label: "Escuchando música" },
+    twitch: { icon: "🔴", label: "Viendo Twitch" },
+    room: { icon: "🎧", label: "En una sala" },
+    offline: { icon: "⚫", label: "Desconectado" }
+  };
+  const state = states[presence] || states.offline;
+  return { presence, icon: state.icon, label: user.presenceLabel || state.label };
+}
+
 function renderFriendsList() {
   const roomUsers = (currentRoom?.users || []).filter(user => user.id !== mySocketId).map(user => ({
     socketId: user.id,
@@ -799,9 +813,10 @@ function renderFriendsList() {
   const friendsHtml = users.length ? `<section class="friend-request-section"><strong>${activeLoginMode === "discord" ? "Amigos" : "Conversaciones temporales"}</strong>${users.map(user => {
     const unread = privateUnread.get(user.clientId) || 0;
     const selected = activePrivateClientId === user.clientId;
+    const state = presenceDisplay(user);
     return `<button class="friend-row${selected ? " active" : ""}" type="button" data-friend-client="${escapeHtml(user.clientId)}">
       <span class="person-icon" style="${user.avatar ? `background-image:url('${escapeHtml(user.avatar)}')` : ""}">${user.avatar ? "" : escapeHtml(user.name?.[0]?.toUpperCase() || "?")}</span>
-      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small><i class="presence-dot ${escapeHtml(user.presence || (user.online ? "online" : "offline"))}"></i>${escapeHtml(user.inRoom ? (user.host ? "Anfitrión · En una sala" : (user.presenceLabel || "En una sala")) : (user.presenceLabel || (user.online ? "En línea" : "Sin conexión")))}</small></span>
+      <span><strong>${escapeHtml(user.name || "Usuario")}</strong><small class="presence-label presence-${escapeHtml(state.presence)}"><span class="presence-icon" aria-hidden="true">${state.icon}</span>${escapeHtml(state.label)}</small></span>
       ${unread ? `<b class="friend-unread">${unread > 99 ? "99+" : unread}</b>` : ""}
     </button>`;
   }).join("")}</section>` : "";
@@ -916,8 +931,7 @@ function renderPrivateMessages(messages = []) {
     const reactions = Object.entries(message.reactions || {}).map(([emoji, users]) => `<button type="button" class="private-reaction${(users || []).includes(persistentClientId) ? " mine" : ""}" data-react-message="${escapeHtml(message.id)}" data-react-emoji="${escapeHtml(emoji)}">${escapeHtml(emoji)} <b>${(users || []).length}</b></button>`).join("");
     const body = message.deletedAt ? '<p class="private-message-deleted">Mensaje eliminado</p>' : `${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}${imageMessageHtml(message.image)}`;
     const actions = message.deletedAt ? "" : `<div class="private-message-actions"><button type="button" data-reply-message="${escapeHtml(message.id)}" title="Responder">↩</button><button type="button" data-quick-react="${escapeHtml(message.id)}" title="Reaccionar">😊</button>${mine ? `<button type="button" data-edit-message="${escapeHtml(message.id)}" title="Editar">✎</button><button type="button" data-delete-message="${escapeHtml(message.id)}" title="Eliminar">🗑</button>` : ""}</div>`;
-    const receipt = mine ? `<span class="message-receipt">${message.readAt ? "✓✓ Leído" : "✓ Enviado"}</span>` : "";
-    return `${separator}<div class="private-message ${mine ? "mine" : "theirs"}" data-message-id="${escapeHtml(message.id || "")}">${reply}${body}<div class="private-message-meta"><small>${time}${message.editedAt ? " · editado" : ""}</small>${receipt}</div>${reactions ? `<div class="private-reactions">${reactions}</div>` : ""}${actions}</div>`;
+    return `${separator}<div class="private-message ${mine ? "mine" : "theirs"}" data-message-id="${escapeHtml(message.id || "")}">${reply}${body}<div class="private-message-meta"><small>${time}${message.editedAt ? " · editado" : ""}</small></div>${reactions ? `<div class="private-reactions">${reactions}</div>` : ""}${actions}</div>`;
   }).join("") : `<p class="private-chat-hint">${term ? "No se encontraron mensajes." : "Todavía no hay mensajes. Envía el primero."}</p>`;
   bindChatImages(box);
   box.querySelectorAll("[data-reply-message]").forEach(button => button.onclick = () => setPrivateReply(messages.find(m => m.id === button.dataset.replyMessage)));
@@ -1205,6 +1219,9 @@ function showTwitchChannel(channel, autoplay = true) {
     document.body.classList.add("is-playing");
     updatePlayButtonState(true);
     hideActivationButton();
+    reportPlaybackPresence("twitch");
+  } else {
+    reportPlaybackPresence(null);
   }
 }
 
@@ -1244,6 +1261,14 @@ function waitForPlayer(timeout = 10000) {
       }
     }, 100);
   });
+}
+
+let lastReportedPlaybackPresence = null;
+function reportPlaybackPresence(type = null) {
+  const normalized = ["music", "twitch"].includes(type) ? type : null;
+  if (lastReportedPlaybackPresence === normalized) return;
+  lastReportedPlaybackPresence = normalized;
+  socket.emit("presence-playback", { type: normalized });
 }
 
 function showActivationButton() {
@@ -1304,6 +1329,7 @@ async function applyRoomPlayback(video, time = 0, playing = true) {
     showTwitchChannel(video.id, playing);
     document.body.classList.toggle("is-playing", playing);
     updatePlayButtonState(playing);
+    reportPlaybackPresence(playing ? "twitch" : null);
     pendingRoomPlayback = null;
     return;
   }
@@ -1373,11 +1399,13 @@ window.onYouTubeIframeAPIReady = function () {
           hideActivationButton();
           userActivatedPlayback = true;
           sessionStorage.setItem("waveroom-playback-activated", "1");
+          reportPlaybackPresence("music");
         }
 
         if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
           document.body.classList.remove("is-playing");
           updatePlayButtonState(false);
+          reportPlaybackPresence(null);
         }
 
         if (remoteAction || !currentRoom || !isHost()) return;
@@ -1550,6 +1578,7 @@ function clearPlaybackAfterLeavingRoom() {
 }
 
 function resetRoomUI() {
+  reportPlaybackPresence(null);
   leaveVoiceChat(false);
   clearPlaybackAfterLeavingRoom();
   currentRoom = null;
