@@ -262,3 +262,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Compatibilidad con Agregar a pantalla de inicio en iPhone/iPad.
 - Manifest, iconos, modo standalone y service worker.
 - La API, autenticación y Socket.IO quedan fuera de la caché para evitar sesiones desactualizadas.
+
+
+## V107
+- Botón Instalar THESO visible dentro del menú lateral.
+- Indicador cuando la PWA está lista para instalar.
+- Caché PWA actualizado con estrategia de red primero para evitar archivos viejos.

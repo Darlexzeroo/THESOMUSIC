@@ -8,6 +8,7 @@
   const guideText = document.getElementById("pwaGuideText");
   const guideHint = document.getElementById("pwaGuideHint");
   const guideAction = document.getElementById("pwaGuideAction");
+  const installStatus = document.getElementById("pwaInstallStatus");
   let deferredPrompt = null;
 
   const ua = navigator.userAgent || "";
@@ -21,6 +22,7 @@
   function setButtonVisible(visible) {
     if (!installButton) return;
     installButton.classList.toggle("hidden", !visible || isStandalone);
+    installButton.classList.toggle("is-installed", isStandalone);
     installButton.setAttribute("aria-hidden", visible && !isStandalone ? "false" : "true");
   }
 
@@ -97,6 +99,7 @@
     deferredPrompt = event;
     setButtonVisible(true);
     installButton?.classList.add("is-ready");
+    if (installStatus) installStatus.textContent = "Listo para instalar";
     installButton?.setAttribute("title", "Instalar THESO en este dispositivo");
   });
 
@@ -104,6 +107,7 @@
     deferredPrompt = null;
     setButtonVisible(false);
     localStorage.setItem("theso-pwa-installed", "1");
+    if (installStatus) installStatus.textContent = "Aplicación instalada";
   });
 
   installButton?.addEventListener("click", requestInstall);

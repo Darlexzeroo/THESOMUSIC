@@ -1,4 +1,4 @@
-const CACHE_NAME = "theso-v105-shell";
+const CACHE_NAME = "theso-v107-shell";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -30,22 +30,20 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/") || url.pathname.startsWith("/socket.io/")) return;
 
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).then(response => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put("/index.html", copy));
-        return response;
-      }).catch(() => caches.match("/index.html"))
-    );
-    return;
-  }
-
+  // Red primero para evitar que una versión anterior oculte cambios nuevos.
   event.respondWith(
-    caches.match(request).then(cached => cached || fetch(request).then(response => {
-      if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
+    fetch(request).then(response => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+      }
       return response;
-    }))
+    }).catch(async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      if (request.mode === "navigate") return caches.match("/index.html");
+      throw new Error("Sin conexión y recurso no almacenado");
+    })
   );
 });
 

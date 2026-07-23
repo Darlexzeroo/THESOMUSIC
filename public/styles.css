@@ -4740,3 +4740,55 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
 @media(max-width:720px){
   .pwa-install-button{right:12px;bottom:calc(86px + env(safe-area-inset-bottom));min-width:48px;min-height:48px;border-radius:50%;padding:0;justify-content:center}
 }
+
+
+/* THESO V107 · instalación siempre visible dentro del menú */
+.side-nav .pwa-install-button{
+  position:relative!important;
+  inset:auto!important;
+  width:100%;
+  min-height:58px;
+  margin-top:10px;
+  padding:9px 10px!important;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start!important;
+  gap:11px;
+  border:1px solid color-mix(in srgb,var(--accent,#12d9ed) 55%,var(--line,#263047));
+  border-radius:13px!important;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent,#12d9ed) 18%,var(--panel,#0b1020)),color-mix(in srgb,var(--accent2,var(--accent,#12d9ed)) 10%,var(--panel2,#101728)));
+  box-shadow:inset 0 1px rgba(255,255,255,.06),0 8px 24px rgba(0,0,0,.16)!important;
+  color:var(--text,#fff);
+  transform:none!important;
+}
+.side-nav .pwa-install-button:hover{
+  border-color:var(--accent,#12d9ed);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent,#12d9ed) 28%,var(--panel,#0b1020)),color-mix(in srgb,var(--accent2,var(--accent,#12d9ed)) 17%,var(--panel2,#101728)));
+  transform:translateY(-1px)!important;
+}
+.pwa-install-icon{
+  flex:0 0 36px;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border-radius:11px;
+  background:linear-gradient(135deg,var(--accent,#12d9ed),var(--accent2,#705cff));
+  color:#fff;
+  font-size:21px;
+  font-weight:900;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent,#12d9ed) 28%,transparent);
+}
+.pwa-install-copy{min-width:0;display:grid;text-align:left;line-height:1.15}
+.pwa-install-copy strong{font-size:13px!important;white-space:nowrap}
+.pwa-install-copy small{margin-top:4px;color:var(--muted,#98a2b7);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pwa-install-button.is-ready{border-color:#51f0a2!important}
+.pwa-install-button.is-ready .pwa-install-icon{background:linear-gradient(135deg,#16c784,#38e8d2)}
+body.sidebar-collapsed .side-nav .pwa-install-button{width:46px;min-height:46px;padding:5px!important;justify-content:center!important;margin-inline:auto}
+body.sidebar-collapsed .pwa-install-copy{display:none}
+body.sidebar-collapsed .pwa-install-icon{width:34px;height:34px;flex-basis:34px}
+@media(max-width:820px){
+  .side-nav .pwa-install-button{position:relative!important;right:auto!important;bottom:auto!important;border-radius:13px!important;min-width:0!important;min-height:58px!important;padding:9px 10px!important;justify-content:flex-start!important}
+  .pwa-install-copy{display:grid!important}
+}
+@media(display-mode:standalone){.side-nav .pwa-install-button{display:none!important}}

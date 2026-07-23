@@ -24,7 +24,7 @@
     body.auth-pending > *:not(.auth-boot-splash):not(script){visibility:hidden!important}
     body.auth-pending .auth-boot-splash{display:grid!important}
   </style>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=107">
 </head>
 <body class="is-idle auth-pending">
   <div id="authBootSplash" class="auth-boot-splash" aria-live="polite">
@@ -90,6 +90,9 @@
         <button id="focusRooms" type="button"><svg class="ui-icon"><use href="#i-rooms"/></svg><span>Salas</span></button>
         <button id="friendsShortcut" type="button"><svg class="ui-icon"><use href="#i-users"/></svg><span>Amigos</span><b id="privateUnreadBadge" class="nav-badge hidden">0</b></button>
         <button id="settingsShortcut" type="button"><svg class="ui-icon"><use href="#i-settings"/></svg><span>Ajustes</span></button>
+        <button id="installPwaButton" class="pwa-install-button" type="button" aria-label="Instalar THESO como aplicación">
+          <span class="pwa-install-icon" aria-hidden="true">⇩</span><span class="pwa-install-copy"><strong>Instalar THESO</strong><small id="pwaInstallStatus">Aplicación para PC y móvil</small></span>
+        </button>
       </nav>
 
       <section class="sidebar-section">
@@ -350,9 +353,6 @@
 
   <div id="imageViewer" class="image-viewer hidden"><button id="closeImageViewer" type="button" aria-label="Cerrar">×</button><img id="imageViewerImg" alt="Imagen del chat"></div>
   <div id="toast" class="toast hidden"></div>
-  <button id="installPwaButton" class="pwa-install-button hidden" type="button" aria-label="Instalar THESO como aplicación">
-    <span aria-hidden="true">⬇</span><strong>Instalar THESO</strong>
-  </button>
   <div id="pwaInstallGuide" class="pwa-install-guide hidden" role="dialog" aria-modal="true" aria-labelledby="pwaGuideTitle">
     <section>
       <button id="closePwaGuide" type="button" aria-label="Cerrar">×</button>
@@ -381,7 +381,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/app.js"></script>
-  <script src="/pwa.js"></script>
+  <script src="/pwa.js?v=107"></script>
 
 
 
