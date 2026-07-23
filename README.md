@@ -241,3 +241,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 ## V103
 - Corrige la previsualización de foto y banner en Personalización.
 - Rediseña la tarjeta de perfil con avatar superpuesto, banner real y controles limpios.
+
+
+## V104
+- Corrige la aplicación inmediata y persistente del banner en la vista de perfil.
+- Rediseña los botones de edición de foto y banner con iconos discretos de cámara.
+- Actualiza todas las vistas del perfil al aplicar o quitar una imagen.

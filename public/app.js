@@ -355,7 +355,15 @@ function applyAvatar(element, name = getName(), avatar = profilePhotoData) {
 
 function applyProfileBanner(element, banner = profileBannerData) {
   if (!element) return;
-  element.style.backgroundImage = banner ? `url("${banner}")` : "";
+  if (banner) {
+    element.style.setProperty("background-image", `url("${banner}")`, "important");
+    element.style.setProperty("background-position", "center", "important");
+    element.style.setProperty("background-size", "cover", "important");
+  } else {
+    element.style.removeProperty("background-image");
+    element.style.removeProperty("background-position");
+    element.style.removeProperty("background-size");
+  }
   element.classList.toggle("has-image", Boolean(banner));
 }
 
@@ -2917,14 +2925,16 @@ function applyEditedProfileImage() {
   const canvas = $("imageEditorCanvas");
   if (!canvas || !profileImageEditor.image) return;
   const data = canvas.toDataURL("image/webp", .9);
-  if (profileImageEditor.mode === "avatar") { profilePhotoData = data; applyAvatar($("editProfilePhoto")); }
-  else { profileBannerData = data; applyProfileBanner($("editProfileBanner")); }
+  if (profileImageEditor.mode === "avatar") profilePhotoData = data;
+  else profileBannerData = data;
+  refreshProfileUI();
   closeImageEditor();
 }
 
 function removeEditedProfileImage() {
-  if (profileImageEditor.mode === "avatar") { profilePhotoData = ""; $("profilePhoto").value = ""; applyAvatar($("editProfilePhoto")); }
-  else { profileBannerData = ""; $("profileBanner").value = ""; applyProfileBanner($("editProfileBanner")); }
+  if (profileImageEditor.mode === "avatar") { profilePhotoData = ""; $("profilePhoto").value = ""; }
+  else { profileBannerData = ""; $("profileBanner").value = ""; }
+  refreshProfileUI();
   closeImageEditor();
 }
 

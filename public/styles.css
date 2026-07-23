@@ -4605,3 +4605,88 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .profile-preview-copy strong{font-size:19px!important}
   .profile-banner-preview.profile-media-edit i{right:10px!important;top:10px!important;font-size:10px!important}
 }
+
+
+/* ======================================================================
+   THESO V104 — banner aplicado correctamente y controles de edición limpios
+   ====================================================================== */
+.profile-banner-preview.profile-media-edit{
+  background-color:#17243b!important;
+  background-repeat:no-repeat!important;
+  cursor:pointer!important;
+}
+.profile-banner-preview.profile-media-edit:not(.has-image){
+  background-image:linear-gradient(135deg,color-mix(in srgb,var(--purple) 82%,#192841),#192841 72%)!important;
+}
+.profile-banner-preview.profile-media-edit::before{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:1!important;
+  background:linear-gradient(180deg,rgba(3,7,15,.02) 15%,rgba(3,7,15,.14) 58%,rgba(3,7,15,.82) 100%)!important;
+  pointer-events:none!important;
+}
+.profile-banner-preview.profile-media-edit::after{display:none!important}
+.profile-banner-preview.profile-media-edit i{
+  right:14px!important;
+  top:14px!important;
+  width:38px!important;
+  height:38px!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:12px!important;
+  background:rgba(7,11,20,.72)!important;
+  border:1px solid rgba(255,255,255,.18)!important;
+  color:#fff!important;
+  font-size:0!important;
+  line-height:1!important;
+  box-shadow:0 10px 26px rgba(0,0,0,.32)!important;
+  backdrop-filter:blur(12px)!important;
+}
+.profile-banner-preview.profile-media-edit i span{
+  font-size:0!important;
+}
+.profile-banner-preview.profile-media-edit i::before{
+  content:"📷"!important;
+  font-size:16px!important;
+  filter:grayscale(1) brightness(1.8)!important;
+}
+.profile-banner-preview.profile-media-edit:hover i{
+  transform:translateY(-1px)!important;
+  border-color:color-mix(in srgb,var(--green) 55%,rgba(255,255,255,.18))!important;
+  background:rgba(7,11,20,.9)!important;
+}
+.profile-preview-avatar.profile-media-edit::after{
+  content:"📷"!important;
+  right:1px!important;
+  bottom:2px!important;
+  width:27px!important;
+  height:27px!important;
+  border:3px solid var(--panel)!important;
+  background:rgba(8,13,23,.94)!important;
+  color:#fff!important;
+  font-size:12px!important;
+  box-shadow:0 7px 18px rgba(0,0,0,.42)!important;
+}
+.profile-preview-avatar.profile-media-edit:hover::after{
+  background:color-mix(in srgb,var(--green) 38%,#08101c)!important;
+}
+.profile-banner-preview.profile-media-edit .profile-banner-empty{
+  left:50%!important;
+  top:50%!important;
+  transform:translate(-50%,-50%)!important;
+  z-index:2!important;
+  padding:9px 13px!important;
+  background:rgba(5,9,17,.46)!important;
+  color:rgba(255,255,255,.9)!important;
+  border:1px dashed rgba(255,255,255,.28)!important;
+  border-radius:12px!important;
+  text-transform:none!important;
+  letter-spacing:0!important;
+}
+.profile-banner-preview.has-image .profile-banner-empty{display:none!important}
+@media(max-width:600px){
+  .profile-banner-preview.profile-media-edit i{right:10px!important;top:10px!important;width:34px!important;height:34px!important}
+  .profile-preview-avatar.profile-media-edit::after{width:25px!important;height:25px!important;font-size:11px!important}
+}
