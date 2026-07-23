@@ -189,3 +189,11 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Permisos por usuario para pausar, saltar, borrar cola, agregar Twitch y expulsar.
 - Votación para saltar con umbral del 60% de participantes elegibles.
 - Validaciones del lado del servidor para impedir saltarse permisos desde el navegador.
+
+## V95 — Aurora UI Refresh
+
+- Rediseño visual completo para escritorio y móvil sin modificar IDs ni eventos existentes.
+- Paneles con acabado translúcido, navegación más limpia y mejor jerarquía visual.
+- Reproductor flotante renovado y cola/chat más claros.
+- Diseño responsive para tablet y móvil con controles táctiles más cómodos.
+- Conserva las funciones de V91: invitaciones, roles, permisos y votación para saltar.
