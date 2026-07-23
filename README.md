@@ -217,3 +217,8 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Perfil superior unificado y compacto, sin bordes dobles.
 - Botón de notificaciones integrado visualmente con el perfil.
 - Selector de tipo de sala completamente rediseñado y compatible con temas.
+
+
+## V99
+- Selector de tipo de sala personalizado, sin menú nativo del navegador.
+- Opciones Pública y Privada con descripción, iconos y estilos compatibles con los temas.

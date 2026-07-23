@@ -4043,3 +4043,27 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .main-content>.topbar .avatar.mini{width:32px!important;height:32px!important;min-width:32px!important}
   .room-privacy-field>div.privacy-select-shell{height:45px!important}
 }
+
+
+/* THESO V99 — selector de tipo de sala personalizado */
+.custom-privacy-select{overflow:visible!important;padding:0!important;height:auto!important;background:transparent!important;border:0!important;box-shadow:none!important;position:relative!important}
+.custom-privacy-select>select{position:absolute!important;inline-size:1px!important;block-size:1px!important;opacity:0!important;pointer-events:none!important}
+.privacy-trigger{width:100%;min-height:52px;display:grid;grid-template-columns:30px minmax(0,1fr) 18px;align-items:center;gap:10px;padding:7px 10px;border:1px solid color-mix(in srgb,var(--v96-accent) 38%,rgba(255,255,255,.10));border-radius:15px;background:linear-gradient(145deg,color-mix(in srgb,var(--v96-accent) 10%,rgba(255,255,255,.045)),rgba(255,255,255,.025));color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 8px 22px rgba(0,0,0,.16);cursor:pointer;text-align:left;transition:.18s ease}
+.privacy-trigger:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--v96-accent) 70%,white 8%);background:linear-gradient(145deg,color-mix(in srgb,var(--v96-accent) 16%,rgba(255,255,255,.05)),rgba(255,255,255,.03))}
+.privacy-trigger:focus-visible,.privacy-trigger[aria-expanded="true"]{outline:0;border-color:var(--v96-accent);box-shadow:0 0 0 3px var(--v96-soft),inset 0 1px 0 rgba(255,255,255,.06)}
+.privacy-trigger-copy{min-width:0;display:flex;flex-direction:column;gap:1px}
+.privacy-trigger-copy b{font-size:13px;line-height:1.15;color:var(--text);white-space:nowrap}
+.privacy-trigger-copy small{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.privacy-leading{width:30px!important;height:30px!important;border-radius:10px!important;font-size:14px!important;background:color-mix(in srgb,var(--v96-accent) 16%,rgba(255,255,255,.04))!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--v96-accent) 25%,transparent)}
+.privacy-chevron{font-size:18px;color:var(--v96-accent);transition:transform .18s ease;line-height:1;transform:translateY(-2px)}
+.privacy-trigger[aria-expanded="true"] .privacy-chevron{transform:rotate(180deg) translateY(2px)}
+.privacy-menu{position:absolute;z-index:90;left:0;right:0;top:calc(100% + 8px);padding:7px;border:1px solid color-mix(in srgb,var(--v96-accent) 32%,rgba(255,255,255,.10));border-radius:16px;background:color-mix(in srgb,var(--panel,#0a0f1a) 94%,black);box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05);backdrop-filter:blur(20px)}
+.privacy-menu.hidden{display:none!important}
+.privacy-option{width:100%;display:grid;grid-template-columns:34px minmax(0,1fr) 20px;align-items:center;gap:10px;padding:10px;border:0;border-radius:11px;background:transparent;color:var(--text);text-align:left;cursor:pointer;transition:.15s ease}
+.privacy-option:hover{background:color-mix(in srgb,var(--v96-accent) 11%,rgba(255,255,255,.035))}
+.privacy-option.is-selected{background:color-mix(in srgb,var(--v96-accent) 17%,rgba(255,255,255,.035));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--v96-accent) 34%,transparent)}
+.privacy-option-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.05);font-size:15px}
+.privacy-option>span:nth-child(2){min-width:0;display:flex;flex-direction:column;gap:2px}
+.privacy-option b{font-size:12px}.privacy-option small{font-size:9px;color:var(--muted)}
+.privacy-check{opacity:0;color:var(--v96-accent);font-weight:900}.privacy-option.is-selected .privacy-check{opacity:1}
+@media(max-width:760px){.privacy-trigger{min-height:50px}.privacy-menu{position:fixed;left:14px;right:14px;top:auto;bottom:88px}}

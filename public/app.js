@@ -3767,3 +3767,65 @@ function reportPresenceActivity() {
   socket.emit("presence-activity");
 }
 ["mousemove", "keydown", "click", "touchstart"].forEach(eventName => document.addEventListener(eventName, reportPresenceActivity, { passive: true }));
+
+
+// THESO V99: selector visual personalizado para el tipo de sala.
+(() => {
+  const select = document.getElementById("roomVisibility");
+  const trigger = document.getElementById("roomVisibilityTrigger");
+  const menu = document.getElementById("roomVisibilityMenu");
+  const label = document.getElementById("roomVisibilityLabel");
+  const hint = document.getElementById("roomVisibilityHint");
+  if (!select || !trigger || !menu || !label || !hint) return;
+
+  const values = {
+    public: { label: "Pública", hint: "Todos pueden encontrarla", icon: "🌐" },
+    private: { label: "Privada", hint: "Solo se entra con código", icon: "🔒" }
+  };
+
+  function render(value) {
+    const current = values[value] || values.public;
+    label.textContent = current.label;
+    hint.textContent = current.hint;
+    const leading = trigger.querySelector(".privacy-leading");
+    if (leading) leading.textContent = current.icon;
+    menu.querySelectorAll("[data-visibility]").forEach(option => {
+      const selected = option.dataset.visibility === value;
+      option.classList.toggle("is-selected", selected);
+      option.setAttribute("aria-selected", String(selected));
+    });
+  }
+
+  function closeMenu() {
+    menu.classList.add("hidden");
+    trigger.setAttribute("aria-expanded", "false");
+  }
+
+  trigger.addEventListener("click", event => {
+    event.stopPropagation();
+    const willOpen = menu.classList.contains("hidden");
+    if (willOpen) {
+      menu.classList.remove("hidden");
+      trigger.setAttribute("aria-expanded", "true");
+    } else closeMenu();
+  });
+
+  menu.addEventListener("click", event => {
+    const option = event.target.closest("[data-visibility]");
+    if (!option) return;
+    select.value = option.dataset.visibility;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    render(select.value);
+    closeMenu();
+    trigger.focus();
+  });
+
+  select.addEventListener("change", () => render(select.value));
+  document.addEventListener("click", event => {
+    if (!menu.contains(event.target) && !trigger.contains(event.target)) closeMenu();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeMenu();
+  });
+  render(select.value);
+})();
