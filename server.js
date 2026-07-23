@@ -314,9 +314,6 @@ app.use(express.static(path.join(__dirname, "public")));
 const rooms = new Map();
 const connectedClients = new Map(); // clientId -> { socketId, name, avatar, banner }
 const socketClients = new Map(); // socketId -> clientId
-const disconnectTimers = new Map(); // clientId -> timeout de salida diferida
-const chatRateLimits = new Map(); // socketId -> timestamps recientes
-const reports = []; // reportes temporales para moderación
 const PRIVATE_MESSAGES_FILE = path.join(__dirname, "private-messages.json");
 let persistentPrivateChats = {};
 try {
@@ -442,51 +439,6 @@ function skipVoteState(room) {
   return { votes: room.skipVotes?.size || 0, needed, eligible: eligible.length };
 }
 
-function findRoomMembershipByClientId(clientId) {
-  for (const [code, room] of rooms.entries()) {
-    for (const [socketId, user] of room.users.entries()) {
-      if (user.clientId === clientId) return { code, room, socketId, user };
-    }
-  }
-  return null;
-}
-
-function transferRoomSocket(clientId, newSocket) {
-  const membership = findRoomMembershipByClientId(clientId);
-  if (!membership) return null;
-  const { code, room, socketId: oldSocketId, user } = membership;
-  if (oldSocketId !== newSocket.id) {
-    room.users.delete(oldSocketId);
-    room.users.set(newSocket.id, user);
-    if (room.hostId === oldSocketId) room.hostId = newSocket.id;
-    if (room.voiceUsers?.has(oldSocketId)) {
-      room.voiceUsers.delete(oldSocketId);
-    }
-    if (room.skipVotes?.has(oldSocketId)) {
-      room.skipVotes.delete(oldSocketId);
-      room.skipVotes.add(newSocket.id);
-    }
-  }
-  newSocket.join(code);
-  return { code, room };
-}
-
-function isSafeChatText(text) {
-  const value = String(text || '');
-  const urls = value.match(/https?:\/\/[^\s]+/gi) || [];
-  if (urls.length > 3) return false;
-  return !urls.some(url => url.length > 300);
-}
-
-function allowChatMessage(socketId) {
-  const now = Date.now();
-  const recent = (chatRateLimits.get(socketId) || []).filter(ts => now - ts < 10000);
-  if (recent.length >= 5) return false;
-  recent.push(now);
-  chatRateLimits.set(socketId, recent);
-  return true;
-}
-
 function currentRoomTime(room) {
   if (!room.playing) return room.time;
   return room.time + (Date.now() - room.updatedAt) / 1000;
@@ -603,14 +555,11 @@ io.on("connection", socket => {
       socketClients.set(socket.id, clientId);
       socket.data.identityId = clientId;
       socket.join(`client:${clientId}`);
-      const pendingDisconnect = disconnectTimers.get(clientId);
-      if (pendingDisconnect) { clearTimeout(pendingDisconnect); disconnectTimers.delete(clientId); }
-      const restoredMembership = transferRoomSocket(clientId, socket);
       rememberContact(clientId, profile.name, profile.avatar, profile.banner);
       if (authenticatedIdentityId && discordSession) {
         await db.upsertDiscordUser(clientId, discordSession, profile);
       }
-      callback?.({ ok: true, clientId, authenticated: Boolean(authenticatedIdentityId), database: db.isMongoReady(), restoredRoom: restoredMembership ? publicRoom(restoredMembership.code, restoredMembership.room) : null });
+      callback?.({ ok: true, clientId, authenticated: Boolean(authenticatedIdentityId), database: db.isMongoReady() });
       broadcastPresence(clientId);
     } catch (error) {
       console.error("Error registrando cliente:", error);
@@ -862,9 +811,7 @@ io.on("connection", socket => {
       voiceUsers: new Set(),
       chat: [],
       privateChats: new Map(),
-      skipVotes: new Set(),
-      bannedClientIds: new Set(),
-      blockedPairs: new Set()
+      skipVotes: new Set()
     };
 
     rooms.set(code, room);
@@ -880,20 +827,12 @@ io.on("connection", socket => {
 
     if (!room) return callback?.({ ok: false, error: "La sala no existe." });
 
-    const normalizedClientId = safeClientId(clientId) || socketClients.get(socket.id) || socket.id;
-    if (room.bannedClientIds?.has(normalizedClientId)) return callback?.({ ok: false, error: "Fuiste baneado de esta sala." });
-    for (const [existingSocketId, existingUser] of room.users.entries()) {
-      if (existingUser.clientId === normalizedClientId && existingSocketId !== socket.id) {
-        room.users.delete(existingSocketId);
-        if (room.hostId === existingSocketId) room.hostId = socket.id;
-      }
-    }
     const username = String(name || "Invitado").trim().slice(0, 30);
     room.users.set(socket.id, {
       name: username,
       avatar: String(avatar || "").slice(0, 3 * 1024 * 1024),
       banner: String(banner || "").slice(0, 3 * 1024 * 1024),
-      clientId: normalizedClientId,
+      clientId: safeClientId(clientId) || socket.id,
       role: authenticatedIdentityId ? "listener" : "guest",
       permissions: {}
     });
@@ -979,42 +918,6 @@ io.on("connection", socket => {
     target?.leave(code); target?.emit("kicked-from-room", { code, reason: "Fuiste expulsado de la sala." });
     io.to(code).emit("system-message", `${name} fue expulsado de la sala.`);
     emitRoom(code); callback?.({ ok: true });
-  });
-
-  socket.on("ban-user", ({ code, targetSocketId } = {}, callback) => {
-    code = String(code || "").trim().toUpperCase();
-    const room = rooms.get(code);
-    if (!room || room.hostId !== socket.id) return callback?.({ ok: false, error: "Solo el anfitrión puede banear." });
-    const target = room.users.get(targetSocketId);
-    if (!target || targetSocketId === room.hostId) return callback?.({ ok: false, error: "Usuario no válido." });
-    room.bannedClientIds ||= new Set();
-    room.bannedClientIds.add(target.clientId);
-    room.users.delete(targetSocketId);
-    io.to(targetSocketId).emit("kicked-from-room", { code, reason: "Fuiste baneado de la sala." });
-    emitRoom(code);
-    callback?.({ ok: true });
-  });
-
-  socket.on("report-user", ({ code, targetSocketId, reason } = {}, callback) => {
-    code = String(code || "").trim().toUpperCase();
-    const room = rooms.get(code);
-    const reporter = room?.users.get(socket.id);
-    const target = room?.users.get(targetSocketId);
-    if (!room || !reporter || !target || targetSocketId === socket.id) return callback?.({ ok: false, error: "Reporte no válido." });
-    reports.push({ code, reporterClientId: reporter.clientId, targetClientId: target.clientId, reason: String(reason || "Sin motivo").slice(0, 300), createdAt: Date.now() });
-    if (reports.length > 500) reports.shift();
-    callback?.({ ok: true });
-  });
-
-  socket.on("block-user", ({ code, targetSocketId } = {}, callback) => {
-    code = String(code || "").trim().toUpperCase();
-    const room = rooms.get(code);
-    const me = room?.users.get(socket.id);
-    const target = room?.users.get(targetSocketId);
-    if (!room || !me || !target) return callback?.({ ok: false, error: "Usuario no válido." });
-    socket.data.blockedClientIds ||= new Set();
-    socket.data.blockedClientIds.add(target.clientId);
-    callback?.({ ok: true });
   });
 
   socket.on("set-video", ({ code, video }, callback) => {
@@ -1342,45 +1245,28 @@ io.on("connection", socket => {
 
     if (!room || !room.users.has(socket.id)) return callback?.({ ok: false, error: "Sala no encontrada." });
     if (roomRole(room, socket.id) === "muted") return callback?.({ ok: false, error: "Estás silenciado en esta sala." });
-    if (!allowChatMessage(socket.id)) return callback?.({ ok: false, error: "Estás enviando mensajes demasiado rápido. Espera unos segundos." });
 
     text = String(text || "").trim().slice(0, 400);
-    if (!isSafeChatText(text)) return callback?.({ ok: false, error: "El mensaje contiene demasiados enlaces o un enlace no válido." });
     image = sanitizeChatImage(image);
     if (!text && !image) return callback?.({ ok: false, error: "Mensaje vacío o imagen no válida." });
 
-    const senderUser = room.users.get(socket.id);
     const message = {
-      author: senderUser?.name || "Invitado",
-      authorClientId: senderUser?.clientId || "",
+      author: room.users.get(socket.id)?.name || "Invitado",
       text,
       image,
       createdAt: Date.now()
     };
 
     room.chat.push(message);
-    for (const recipientSocketId of room.users.keys()) {
-      const recipientSocket = io.sockets.sockets.get(recipientSocketId);
-      if (recipientSocket?.data?.blockedClientIds?.has(message.authorClientId)) continue;
-      io.to(recipientSocketId).emit("chat", message);
-    }
+    io.to(code).emit("chat", message);
     callback?.({ ok: true });
   });
 
   socket.on("disconnect", () => {
     const disconnectedClientId = socketClients.get(socket.id);
+    if (disconnectedClientId && connectedClients.get(disconnectedClientId)?.socketId === socket.id) connectedClients.delete(disconnectedClientId);
     socketClients.delete(socket.id);
-    chatRateLimits.delete(socket.id);
-    if (!disconnectedClientId) return removeFromRooms(socket);
-    const existing = disconnectTimers.get(disconnectedClientId);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => {
-      disconnectTimers.delete(disconnectedClientId);
-      if (connectedClients.get(disconnectedClientId)?.socketId === socket.id) connectedClients.delete(disconnectedClientId);
-      removeFromRooms(socket);
-      broadcastPresence(disconnectedClientId);
-    }, 45000);
-    disconnectTimers.set(disconnectedClientId, timer);
+    removeFromRooms(socket);
   });
 });
 

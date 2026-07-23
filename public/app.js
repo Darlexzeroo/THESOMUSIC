@@ -4,8 +4,6 @@ let player;
 let playerReady = false;
 let currentVideo = null;
 let currentRoom = null;
-const LAST_ROOM_KEY = "theso-last-room-v1";
-let automaticRoomRestorePending = false;
 let mySocketId = null;
 let remoteAction = false;
 let syncInterval = null;
@@ -275,15 +273,6 @@ function registerPersistentClient(callback) {
     if (!response?.ok) {
       console.warn("No se pudo registrar el cliente persistente:", response?.error || "Error desconocido");
     }
-    if (response?.restoredRoom) {
-      mySocketId = socket.id;
-      renderRoom(response.restoredRoom);
-      if (response.restoredRoom.video) {
-        applyRoomPlayback(response.restoredRoom.video, response.restoredRoom.time || 0, response.restoredRoom.playing).catch(() => {});
-      }
-    } else {
-      tryRestoreLastRoom();
-    }
     callback?.(response);
   });
 }
@@ -291,32 +280,6 @@ function registerPersistentClient(callback) {
 // Limpia toda la información que pertenece a la cuenta anterior. Los amigos,
 // solicitudes, conversaciones y contadores de Discord nunca deben heredarse
 // por una sesión de invitado (ni al revés).
-function saveLastRoom(room) {
-  if (!room?.code || !persistentClientId) return;
-  try { localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ code: room.code, clientId: persistentClientId, savedAt: Date.now() })); } catch {}
-}
-
-function clearLastRoom() {
-  try { localStorage.removeItem(LAST_ROOM_KEY); } catch {}
-}
-
-function tryRestoreLastRoom() {
-  if (!socket.connected || currentRoom || automaticRoomRestorePending || !persistentClientId) return;
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(LAST_ROOM_KEY) || "null"); } catch {}
-  if (!saved?.code || saved.clientId !== persistentClientId || Date.now() - Number(saved.savedAt || 0) > 24 * 60 * 60 * 1000) return;
-  automaticRoomRestorePending = true;
-  socket.emit("join-room", { code: saved.code, ...getProfile() }, async response => {
-    automaticRoomRestorePending = false;
-    if (!response?.ok) { clearLastRoom(); return; }
-    mySocketId = response.socketId || socket.id;
-    renderRoom(response.room);
-    if (response.room?.video) {
-      try { await applyRoomPlayback(response.room.video, response.room.time || 0, response.room.playing); } catch {}
-    }
-  });
-}
-
 function leaveRoomForAccountSwitch() {
   // Una sala pertenece a la identidad con la que se entró. Al cambiar entre
   // Discord e invitado nunca conservamos la sala anterior en pantalla ni en
@@ -325,7 +288,6 @@ function leaveRoomForAccountSwitch() {
   if (roomCode && socket.connected) {
     socket.emit("leave-room", { code: roomCode });
   }
-  clearLastRoom();
   if (currentRoom) {
     resetRoomUI();
     closeRoomModal();
@@ -1522,7 +1484,6 @@ async function loadVideo(video, autoplay = false, startSeconds = 0) {
 
 function renderRoom(room) {
   currentRoom = room;
-  saveLastRoom(room);
   updatePlayerDockVisibility();
   $("roomEntry").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
@@ -1531,9 +1492,8 @@ function renderRoom(room) {
   $("roomDirectoryCard")?.classList.add("hidden");
   $("roomCode").textContent = `${room.roomName || "Mi sala"} · ${room.code} · ${room.visibility === "private" ? "Privada" : "Pública"}`;
   $("peopleCount").textContent = room.users.length;
-  const myRoomUser = room.users.find(user => user.id === mySocketId);
-  $("roomRole").textContent = myRoomUser?.roleLabel || (isHost() ? "Anfitrión" : "Oyente");
-  $("roleBadge").textContent = isHost() ? "Controlas la sala" : (myRoomUser?.roleLabel || "Escuchando en sala");
+  $("roomRole").textContent = isHost() ? "Anfitrión" : "Oyente";
+  $("roleBadge").textContent = isHost() ? "Controlas la sala" : "Escuchando en sala";
 
   $("people").innerHTML = room.users.map(user => `
     <div class="person${user.banner ? " has-banner" : ""}" data-room-person="${escapeHtml(user.id)}" style="${user.banner ? `--room-user-banner:url('${escapeHtml(user.banner)}')` : ""}">
@@ -1543,8 +1503,7 @@ function renderRoom(room) {
         <strong>${escapeHtml(user.name)}</strong>
         <span>${escapeHtml(user.roleLabel || (user.id === room.hostId ? "Anfitrión" : "Oyente"))}${user.id === mySocketId ? " · Tú" : ""}</span>
       </div>
-      ${isHost() && user.id !== room.hostId ? `<div class="room-role-tools"><select data-role-user="${escapeHtml(user.id)}"><option value="listener" ${user.role === "listener" ? "selected" : ""}>Oyente</option><option value="moderator" ${user.role === "moderator" ? "selected" : ""}>Moderador</option><option value="dj" ${user.role === "dj" ? "selected" : ""}>DJ</option><option value="guest" ${user.role === "guest" ? "selected" : ""}>Invitado</option><option value="muted" ${user.role === "muted" ? "selected" : ""}>Silenciado</option></select><button type="button" data-room-permissions="${escapeHtml(user.id)}" title="Permisos">⚙</button><button type="button" data-kick-user="${escapeHtml(user.id)}" title="Expulsar">⛔</button><button type="button" data-ban-user="${escapeHtml(user.id)}" title="Banear">🚫</button></div>` : ""}
-      ${user.id !== mySocketId ? `<div class="person-safety-tools"><button type="button" data-block-user="${escapeHtml(user.id)}" title="Bloquear">🔕</button><button type="button" data-report-user="${escapeHtml(user.id)}" title="Reportar">⚑</button></div>` : ""}
+      ${isHost() && user.id !== room.hostId ? `<div class="room-role-tools"><select data-role-user="${escapeHtml(user.id)}"><option value="listener" ${user.role === "listener" ? "selected" : ""}>Oyente</option><option value="moderator" ${user.role === "moderator" ? "selected" : ""}>Moderador</option><option value="dj" ${user.role === "dj" ? "selected" : ""}>DJ</option><option value="guest" ${user.role === "guest" ? "selected" : ""}>Invitado</option><option value="muted" ${user.role === "muted" ? "selected" : ""}>Silenciado</option></select><button type="button" data-room-permissions="${escapeHtml(user.id)}" title="Permisos">⚙</button><button type="button" data-kick-user="${escapeHtml(user.id)}" title="Expulsar">⛔</button></div>` : ""}
       ${user.id !== mySocketId && activeLoginMode === "discord" && String(user.clientId || "").startsWith("discord_") ? `<button class="person-add-friend" type="button" data-add-friend="${escapeHtml(user.clientId || user.id)}" title="Enviar solicitud de amistad">＋</button>` : ""}
     </div>
   `).join("");
@@ -1558,9 +1517,6 @@ function renderRoom(room) {
     socket.emit("set-room-role", { code: currentRoom.code, targetSocketId: user.id, role: user.role || "listener", permissions: { pause:parts[0], skip:parts[1], deleteQueue:parts[2], addTwitch:parts[3], kick:parts[4] } }, response => { if (!response?.ok) notify(response?.error); });
   }));
   $("people").querySelectorAll("[data-kick-user]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); if (confirm("¿Expulsar a este usuario?")) socket.emit("kick-user", { code: currentRoom.code, targetSocketId: button.dataset.kickUser }, response => { if (!response?.ok) notify(response?.error); }); }));
-  $("people").querySelectorAll("[data-ban-user]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); if (confirm("¿Banear permanentemente de esta sala a este usuario?")) socket.emit("ban-user", { code: currentRoom.code, targetSocketId: button.dataset.banUser }, response => { if (!response?.ok) notify(response?.error); else notify("Usuario baneado."); }); }));
-  $("people").querySelectorAll("[data-block-user]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); socket.emit("block-user", { code: currentRoom.code, targetSocketId: button.dataset.blockUser }, response => notify(response?.ok ? "Usuario bloqueado para esta sesión." : response?.error)); }));
-  $("people").querySelectorAll("[data-report-user]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); const reason = prompt("Motivo del reporte:", "Spam o comportamiento inapropiado"); if (!reason) return; socket.emit("report-user", { code: currentRoom.code, targetSocketId: button.dataset.reportUser, reason }, response => notify(response?.ok ? "Reporte enviado." : response?.error)); }));
   refreshRoomSpeakingIndicators();
 
   $("queueCount").textContent = room.queue.length;
@@ -2661,7 +2617,6 @@ $("refreshRooms")?.addEventListener("click", requestRoomDirectory);
 $("leaveRoom").addEventListener("click", () => {
   if (!currentRoom) return;
   socket.emit("leave-room", { code: currentRoom.code }, () => {
-    clearLastRoom();
     resetRoomUI();
     notify("Saliste de la sala.");
   });
@@ -2683,7 +2638,6 @@ $("chatForm").addEventListener("submit", event => {
 
   socket.emit("chat", { code: currentRoom.code, text }, response => {
     if (response?.ok) input.value = "";
-    else notify(response?.error || "No se pudo enviar el mensaje.");
   });
 });
 
@@ -3037,7 +2991,7 @@ socket.on("voice-signal", async ({ from, data }) => {
 
 socket.on("skip-vote-updated", state => { if ($("voteSkipText")) $("voteSkipText").textContent = `${state?.votes || 0}/${state?.needed || 1}`; });
 socket.on("role-updated", ({ roleLabel }) => { notify(`Tu rol ahora es ${roleLabel || "Oyente"}.`); });
-socket.on("kicked-from-room", ({ reason }) => { clearLastRoom(); resetRoomUI(); notify(reason || "Fuiste expulsado de la sala."); });
+socket.on("kicked-from-room", ({ reason }) => { resetRoomUI(); notify(reason || "Fuiste expulsado de la sala."); });
 
 socket.on("room-invite", invite => {
   const roomLabel = invite?.roomName || "una sala";
@@ -3813,53 +3767,3 @@ function reportPresenceActivity() {
   socket.emit("presence-activity");
 }
 ["mousemove", "keydown", "click", "touchstart"].forEach(eventName => document.addEventListener(eventName, reportPresenceActivity, { passive: true }));
-
-
-// Ajuste móvil: evita que el teclado cubra el chat y mantiene controles táctiles visibles.
-(function setupMobileViewport() {
-  const update = () => {
-    const height = window.visualViewport?.height || window.innerHeight;
-    document.documentElement.style.setProperty("--theso-viewport-height", `${height}px`);
-    document.body.classList.toggle("keyboard-open", Boolean(window.visualViewport && window.innerHeight - window.visualViewport.height > 140));
-  };
-  window.visualViewport?.addEventListener("resize", update);
-  window.addEventListener("resize", update);
-  update();
-})();
-
-// THESO V94: navegación inferior móvil y adaptación al teclado.
-(() => {
-  const nav = document.getElementById('mobileBottomNav');
-  if (!nav) return;
-  const buttons = [...nav.querySelectorAll('[data-mobile-action]')];
-  const setActive = (button) => {
-    buttons.forEach((item) => item.classList.toggle('active', item === button));
-  };
-  nav.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-mobile-action]');
-    if (!button) return;
-    setActive(button);
-    const action = button.dataset.mobileAction;
-    if (action === 'home') {
-      document.getElementById('homePanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (action === 'rooms') {
-      document.getElementById('focusRooms')?.click();
-    } else if (action === 'chat') {
-      const rail = document.getElementById('railRoomChat');
-      if (rail && !rail.classList.contains('hidden')) rail.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      else document.getElementById('friendsShortcut')?.click();
-    } else if (action === 'friends') {
-      document.getElementById('friendsShortcut')?.click();
-    } else if (action === 'profile') {
-      document.getElementById('openProfile')?.click();
-    }
-  });
-
-  const updateKeyboardState = () => {
-    if (!window.visualViewport) return;
-    const keyboardVisible = window.innerHeight - window.visualViewport.height > 160;
-    document.body.classList.toggle('keyboard-open', keyboardVisible);
-  };
-  window.visualViewport?.addEventListener('resize', updateKeyboardState);
-  window.visualViewport?.addEventListener('scroll', updateKeyboardState);
-})();
