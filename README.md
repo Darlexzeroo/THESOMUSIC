@@ -229,3 +229,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Menú desplegable corregido para no superponerse con controles vecinos.
 - Perfil superior rediseñado para mostrar foto y banner guardados.
 - Mejoras de capas, contraste y adaptación móvil.
+
+
+## V101
+- Barra lateral contraída rediseñada como dock compacto.
+- Oculta correctamente los paneles de sala al guardar el menú.
+- Tooltips limpios para los iconos.
+- Selector de tipo de sala más compacto, sin bordes duplicados y con despliegue refinado.

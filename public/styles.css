@@ -4236,3 +4236,152 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .main-content>.topbar .avatar.mini{width:38px!important;height:38px!important;min-width:38px!important}
   .main-content>.topbar .mini-profile-copy,.main-content>.topbar .profile-chevron{display:none!important}
 }
+
+/* ======================================================================
+   THESO V101 — barra lateral compacta limpia + selector flotante refinado
+   ====================================================================== */
+@media (min-width:1101px){
+  body.sidebar-collapsed .app-layout{
+    grid-template-columns:76px minmax(0,1fr) 350px!important;
+  }
+  body.sidebar-collapsed .sidebar{
+    width:76px!important;
+    padding:14px 10px 22px!important;
+    overflow:visible!important;
+    border-right-color:color-mix(in srgb,var(--v96-accent) 16%,rgba(255,255,255,.08))!important;
+  }
+  body.sidebar-collapsed .brand{
+    min-height:52px!important;
+    height:52px!important;
+    padding:0!important;
+    justify-content:center!important;
+    border-bottom:1px solid rgba(255,255,255,.055)!important;
+  }
+  body.sidebar-collapsed .brand-wave,
+  body.sidebar-collapsed .brand strong{display:none!important}
+  body.sidebar-collapsed .brand .collapse{
+    margin:0!important;
+    width:42px!important;
+    height:42px!important;
+    min-width:42px!important;
+    border-radius:14px!important;
+    color:var(--v96-accent)!important;
+    background:color-mix(in srgb,var(--v96-accent) 9%,rgba(255,255,255,.03))!important;
+    border-color:color-mix(in srgb,var(--v96-accent) 25%,rgba(255,255,255,.08))!important;
+  }
+  body.sidebar-collapsed .profile-card{
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    width:52px!important;
+    height:52px!important;
+    min-height:52px!important;
+    margin:14px auto 18px!important;
+    padding:5px!important;
+    border-radius:17px!important;
+    background:color-mix(in srgb,var(--v96-accent) 7%,rgba(255,255,255,.025))!important;
+    border:1px solid color-mix(in srgb,var(--v96-accent) 20%,rgba(255,255,255,.08))!important;
+    overflow:visible!important;
+  }
+  body.sidebar-collapsed .profile-card .avatar{
+    width:40px!important;height:40px!important;min-width:40px!important;
+    box-shadow:0 0 0 2px var(--panel,#0a0f1a),0 0 12px color-mix(in srgb,var(--v96-accent) 24%,transparent)!important;
+  }
+  body.sidebar-collapsed .profile-card>span:not(.avatar),
+  body.sidebar-collapsed .profile-card>b,
+  body.sidebar-collapsed .profile-card-banner{display:none!important}
+  body.sidebar-collapsed .side-nav{gap:8px!important;padding:0!important;align-items:center!important}
+  body.sidebar-collapsed .side-nav button{
+    position:relative!important;
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    width:52px!important;
+    height:48px!important;
+    min-height:48px!important;
+    margin:0 auto!important;
+    padding:0!important;
+    border-radius:15px!important;
+    color:var(--muted)!important;
+    background:transparent!important;
+  }
+  body.sidebar-collapsed .side-nav button .ui-icon{width:21px!important;height:21px!important;margin:0!important}
+  body.sidebar-collapsed .side-nav button.active{
+    color:var(--v96-accent)!important;
+    background:color-mix(in srgb,var(--v96-accent) 13%,rgba(255,255,255,.025))!important;
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--v96-accent) 24%,transparent)!important;
+  }
+  body.sidebar-collapsed .side-nav button.active::before{
+    content:"";position:absolute;left:-10px;top:13px;width:3px;height:22px;border-radius:0 5px 5px 0;background:var(--v96-accent);box-shadow:0 0 10px var(--v96-accent)
+  }
+  body.sidebar-collapsed .side-nav button>span{display:none!important}
+  body.sidebar-collapsed .nav-badge{
+    display:grid!important;position:absolute!important;top:3px!important;right:1px!important;
+    min-width:17px!important;height:17px!important;padding:0 4px!important;font-size:9px!important;border:2px solid var(--panel,#0a0f1a)!important
+  }
+  body.sidebar-collapsed .nav-badge.hidden{display:none!important}
+  body.sidebar-collapsed .sidebar-section{display:none!important}
+  body.sidebar-collapsed .side-nav button::after,
+  body.sidebar-collapsed .profile-card::after{
+    left:calc(100% + 12px)!important;top:50%!important;bottom:auto!important;transform:translate(4px,-50%)!important;
+    min-width:max-content!important;padding:8px 10px!important;border-radius:9px!important;
+    background:#0b101b!important;border:1px solid color-mix(in srgb,var(--v96-accent) 22%,rgba(255,255,255,.10))!important;
+    box-shadow:0 12px 30px rgba(0,0,0,.4)!important;z-index:3000!important
+  }
+  body.sidebar-collapsed .side-nav button:hover::after,
+  body.sidebar-collapsed .profile-card:hover::after{transform:translate(0,-50%)!important}
+}
+
+/* Selector: una sola superficie y menú más ligero, sin marcos duplicados. */
+.room-create-row{position:relative!important;z-index:50!important;align-items:end!important}
+.room-privacy-field{isolation:isolate!important}
+.privacy-trigger{
+  min-height:46px!important;
+  grid-template-columns:28px minmax(0,1fr) 16px!important;
+  gap:9px!important;
+  padding:6px 9px!important;
+  border-radius:12px!important;
+  border:1px solid color-mix(in srgb,var(--v96-accent) 25%,rgba(255,255,255,.09))!important;
+  background:color-mix(in srgb,var(--panel2,#0d1320) 96%,var(--v96-accent) 4%)!important;
+  box-shadow:none!important;
+}
+.privacy-trigger:hover{border-color:color-mix(in srgb,var(--v96-accent) 56%,rgba(255,255,255,.10))!important;background:color-mix(in srgb,var(--panel2,#0d1320) 91%,var(--v96-accent) 9%)!important}
+.privacy-trigger[aria-expanded="true"]{
+  border-color:var(--v96-accent)!important;
+  border-bottom-left-radius:12px!important;border-bottom-right-radius:12px!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--v96-accent) 14%,transparent)!important;
+}
+.privacy-leading{width:28px!important;height:28px!important;border-radius:9px!important;font-size:13px!important}
+.privacy-trigger-copy{gap:2px!important}
+.privacy-trigger-copy b{font-size:12px!important;font-weight:800!important}
+.privacy-trigger-copy small{font-size:8px!important;opacity:.75!important}
+.privacy-chevron{font-size:15px!important;transform:none!important;display:grid;place-items:center}
+.privacy-trigger[aria-expanded="true"] .privacy-chevron{transform:rotate(180deg)!important}
+.privacy-menu{
+  top:calc(100% + 6px)!important;
+  padding:5px!important;
+  border-radius:13px!important;
+  border:1px solid color-mix(in srgb,var(--v96-accent) 24%,rgba(255,255,255,.09))!important;
+  background:color-mix(in srgb,var(--panel,#090d17) 97%,var(--v96-accent) 3%)!important;
+  box-shadow:0 18px 42px rgba(0,0,0,.52)!important;
+  backdrop-filter:blur(24px) saturate(125%)!important;
+  overflow:hidden!important;
+}
+.privacy-option{
+  min-height:48px!important;
+  grid-template-columns:30px minmax(0,1fr) 18px!important;
+  gap:9px!important;padding:7px 8px!important;border-radius:9px!important
+}
+.privacy-option+.privacy-option{margin-top:3px!important}
+.privacy-option:hover{background:rgba(255,255,255,.045)!important}
+.privacy-option.is-selected{
+  background:color-mix(in srgb,var(--v96-accent) 12%,rgba(255,255,255,.025))!important;
+  box-shadow:none!important
+}
+.privacy-option-icon{width:30px!important;height:30px!important;border-radius:9px!important;font-size:13px!important}
+.privacy-option b{font-size:12px!important}.privacy-option small{font-size:8px!important;line-height:1.25!important}
+.privacy-check{font-size:14px!important}
+
+@media(max-width:760px){
+  .privacy-menu{position:absolute!important;inset:auto 0 auto 0!important;top:calc(100% + 6px)!important;width:auto!important}
+}
