@@ -202,3 +202,14 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Cola compacta, controles táctiles grandes, barra inferior móvil y ajuste al teclado virtual.
 
 > Las salas continúan almacenadas en memoria del servidor. Una recarga del navegador se recupera; un reinicio completo de Render elimina las salas activas. Para persistencia incluso tras reinicios del servidor se necesitaría guardar el estado de sala en MongoDB o Redis.
+
+
+## V93 — Rediseño Midnight Purple
+
+- Nueva organización visual para escritorio inspirada en el concepto aprobado.
+- Barra lateral moderna, panel central, chat y cola en rail derecho.
+- Reproductor inferior tipo Spotify.
+- Navegación inferior en móviles.
+- Mini reproductor móvil y cola más compacta.
+- Diseño oscuro morado con paneles, bordes y animaciones consistentes.
+- Se conservaron los IDs y la lógica existente para evitar regresiones funcionales.
