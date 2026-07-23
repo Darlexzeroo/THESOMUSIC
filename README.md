@@ -204,3 +204,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Se eliminó la barra superior vacía.
 - Perfil y notificaciones quedaron flotando en la esquina superior derecha.
 - Se conservan IDs, eventos y funciones de la V91.
+
+
+## V97 — Menú y creador de salas refinados
+- Botón de contraer menú rediseñado.
+- Formulario de sala reorganizado y más compacto.
+- Perfil y notificaciones superiores alineados y simplificados.
+- Colores compatibles con todos los temas.

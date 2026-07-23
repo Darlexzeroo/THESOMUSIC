@@ -70,7 +70,7 @@
   <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
   <div class="app-layout">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-wave">◢◣</span><strong>THESO</strong><button class="collapse" type="button" aria-label="Cerrar menú"><svg class="ui-icon"><use href="#i-panel"/></svg></button></div>
+      <div class="brand"><span class="brand-wave">◢◣</span><strong>THESO</strong><button class="collapse" type="button" aria-label="Contraer menú" title="Contraer menú"><span class="collapse-lines" aria-hidden="true"><i></i><i></i></span></button></div>
 
       <button class="profile-card" id="openProfile" type="button"><span id="profileCardBanner" class="profile-card-banner" aria-hidden="true"></span>
         <span id="avatar" class="avatar">D</span>
@@ -87,11 +87,15 @@
 
       <section class="sidebar-section">
         <h3>TUS SALAS</h3>
-        <div id="roomEntry" class="room-entry">
-          <div class="room-tile"><span>▣</span><div><strong>Sin sala</strong><small>Crea o únete</small></div></div>
-          <input id="roomNameInput" class="room-name-input" maxlength="40" placeholder="Nombre de la sala (opcional)">
-          <div class="room-create-row"><select id="roomVisibility" aria-label="Privacidad de la sala"><option value="public">🌐 Pública</option><option value="private">🔒 Privada</option></select><button id="createRoom" class="gradient-btn" type="button">＋ Crear sala</button></div>
-          <div class="join-mini"><input id="roomCodeInput" maxlength="6" placeholder="CÓDIGO"><button id="joinRoom" type="button">Entrar</button></div>
+        <div id="roomEntry" class="room-entry room-launcher">
+          <div class="room-tile room-status-card"><span class="room-status-icon">◇</span><div><strong>Sin sala</strong><small>Crea una sala o únete con un código</small></div><span class="room-status-dot" aria-hidden="true"></span></div>
+          <label class="room-field room-name-field"><span>Nombre de la sala</span><div><svg class="ui-icon"><use href="#i-rooms"/></svg><input id="roomNameInput" class="room-name-input" maxlength="40" placeholder="Ej. Noche de música"></div></label>
+          <div class="room-create-row">
+            <label class="room-field room-privacy-field"><span>Privacidad</span><div><select id="roomVisibility" aria-label="Privacidad de la sala"><option value="public">🌐 Pública</option><option value="private">🔒 Privada</option></select></div></label>
+            <button id="createRoom" class="gradient-btn create-room-primary" type="button"><span>＋</span><b>Crear</b></button>
+          </div>
+          <div class="room-divider"><span>o únete con código</span></div>
+          <div class="join-mini room-join-row"><div class="join-code-shell"><svg class="ui-icon"><use href="#i-rooms"/></svg><input id="roomCodeInput" maxlength="6" placeholder="CÓDIGO"></div><button id="joinRoom" type="button">Entrar</button></div>
         </div>
 
         <div id="roomPanel" class="room-panel hidden">

@@ -3728,3 +3728,135 @@ input[type="range"]{accent-color:var(--v96-accent)!important}
   .main-content>.topbar .mini-profile{min-height:42px!important;width:42px!important;padding:2px!important;border-radius:50%!important;overflow:hidden}
   .main-content>.topbar .avatar.mini{width:36px!important;height:36px!important}
 }
+
+/* ======================================================================
+   THESO V97 — Menú, creador de salas y perfil superior refinados
+   ====================================================================== */
+:root{
+  --v97-surface:color-mix(in srgb,var(--panel,#0a0f1a) 94%,transparent);
+  --v97-surface-2:color-mix(in srgb,var(--panel2,#0d1320) 97%,transparent);
+  --v97-hairline:color-mix(in srgb,var(--v96-accent) 16%,rgba(255,255,255,.08));
+}
+
+/* Botón de contraer menú: simple, reconocible y sin icono extraño */
+.brand .collapse{
+  position:relative!important;
+  display:grid!important;
+  place-items:center!important;
+  width:38px!important;
+  height:38px!important;
+  min-width:38px!important;
+  padding:0!important;
+  border:1px solid var(--v97-hairline)!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.035)!important;
+  box-shadow:none!important;
+  color:var(--muted)!important;
+  overflow:hidden;
+}
+.brand .collapse:hover{
+  color:var(--text)!important;
+  border-color:var(--v96-accent)!important;
+  background:var(--v96-soft)!important;
+  transform:translateY(-1px)!important;
+}
+.collapse-lines{width:17px;height:14px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.collapse-lines i{display:block;height:2px;border-radius:99px;background:currentColor;transition:transform .2s ease,width .2s ease}
+.collapse-lines i:first-child{width:17px}.collapse-lines i:last-child{width:11px;margin-left:auto}
+body.sidebar-collapsed .collapse-lines i:first-child{width:11px;margin-left:auto}
+body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
+
+/* Tarjeta de creación/unión de sala */
+.room-entry.room-launcher{
+  gap:12px!important;
+  padding:12px!important;
+  border:1px solid var(--v97-hairline)!important;
+  border-radius:18px!important;
+  background:linear-gradient(155deg,var(--v97-surface-2),color-mix(in srgb,var(--v96-accent) 5%,var(--v97-surface)))!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.18)!important;
+}
+.room-status-card{
+  position:relative;
+  min-height:62px;
+  padding:11px 12px!important;
+  border:0!important;
+  border-radius:13px!important;
+  background:rgba(255,255,255,.035)!important;
+}
+.room-status-icon{
+  width:35px;height:35px;display:grid;place-items:center;border-radius:11px;
+  background:var(--v96-soft);color:var(--v96-accent);font-size:20px!important;font-weight:800;
+}
+.room-status-card strong{font-size:14px}.room-status-card small{font-size:11px!important;line-height:1.35}
+.room-status-dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.55}
+.room-field{display:grid;gap:6px;min-width:0}
+.room-field>span{font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);padding-left:2px}
+.room-field>div,.join-code-shell{
+  min-width:0;height:43px;display:flex;align-items:center;gap:8px;padding:0 11px;
+  border:1px solid rgba(255,255,255,.075);border-radius:12px;background:rgba(255,255,255,.035);
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.room-field>div:focus-within,.join-code-shell:focus-within{
+  border-color:var(--v96-accent)!important;box-shadow:0 0 0 3px var(--v96-soft)!important;background:rgba(255,255,255,.05)
+}
+.room-field .ui-icon,.join-code-shell .ui-icon{width:17px;height:17px;color:var(--muted);flex:none}
+.room-name-input,.room-create-row select,.join-code-shell input{
+  width:100%!important;height:100%!important;min-width:0!important;padding:0!important;border:0!important;border-radius:0!important;
+  background:transparent!important;box-shadow:none!important;color:var(--text)!important;outline:0!important;font-size:13px!important;
+}
+.room-name-input::placeholder,.join-code-shell input::placeholder{color:color-mix(in srgb,var(--muted) 78%,transparent)}
+.room-create-row{display:grid!important;grid-template-columns:minmax(0,1fr) 88px!important;gap:9px!important;align-items:end}
+.room-privacy-field>div{padding-right:7px}.room-create-row select{appearance:auto;cursor:pointer}
+.create-room-primary{
+  height:43px!important;padding:0 13px!important;border-radius:12px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;
+  color:#fff!important;font-size:13px!important;white-space:nowrap;box-shadow:0 10px 22px var(--v96-glow)!important;
+}
+.create-room-primary span{font-size:18px;line-height:1}.create-room-primary b{font-weight:800}
+.room-divider{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.room-divider::before,.room-divider::after{content:"";height:1px;flex:1;background:rgba(255,255,255,.07)}
+.room-join-row{display:grid!important;grid-template-columns:minmax(0,1fr) 72px!important;gap:8px!important}
+.join-code-shell{height:43px}
+.room-join-row>button{
+  height:43px!important;padding:0 12px!important;border-radius:12px!important;border:1px solid var(--v97-hairline)!important;
+  background:rgba(255,255,255,.04)!important;color:var(--text)!important;font-weight:750!important;
+}
+.room-join-row>button:hover{border-color:var(--v96-accent)!important;background:var(--v96-soft)!important}
+
+/* Perfil superior compacto, limpio y realmente alineado a la esquina */
+.main-content>.topbar .top-actions{
+  top:14px!important;right:18px!important;gap:7px!important;
+}
+.main-content>.topbar .notification-btn{
+  width:42px!important;height:42px!important;min-height:42px!important;
+  border-radius:13px!important;background:var(--v97-surface)!important;
+  box-shadow:0 10px 24px rgba(0,0,0,.28)!important;
+}
+.main-content>.topbar .notification-btn:hover{background:var(--v96-soft)!important;border-color:var(--v96-accent)!important}
+.main-content>.topbar .mini-profile{
+  min-height:42px!important;height:42px!important;max-width:205px!important;
+  padding:3px 9px 3px 4px!important;gap:8px!important;border-radius:14px!important;
+  background:var(--v97-surface)!important;border-color:var(--v97-hairline)!important;
+  box-shadow:0 10px 24px rgba(0,0,0,.28)!important;overflow:hidden!important;
+}
+.main-content>.topbar .mini-profile:hover{border-color:var(--v96-accent)!important;background:color-mix(in srgb,var(--v96-accent) 8%,var(--v97-surface))!important}
+.main-content>.topbar .mini-profile-banner{display:none!important}
+.main-content>.topbar .avatar.mini{width:34px!important;height:34px!important;min-width:34px!important;border-width:1px!important;box-shadow:0 0 0 2px var(--v96-soft)!important}
+.main-content>.topbar .mini-profile-copy{min-width:0;display:grid;line-height:1.05;text-align:left}
+.main-content>.topbar .mini-profile-copy strong{max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px!important}
+.main-content>.topbar .mini-profile-copy small{margin-top:3px;font-size:9px!important;color:var(--muted)!important;white-space:nowrap}
+.main-content>.topbar .profile-chevron{width:15px!important;height:15px!important;color:var(--muted)!important;margin-left:1px}
+
+/* El sidebar se ve más coherente con los controles nuevos */
+.sidebar{padding:14px 11px!important}
+.brand{height:54px!important;padding:4px 7px 13px!important}
+.sidebar-section{margin-top:15px!important;padding-top:8px!important}
+.sidebar-section h3{margin-bottom:8px!important;color:var(--v96-accent)!important;opacity:.9}
+
+@media(max-width:760px){
+  .room-entry.room-launcher{padding:11px!important}
+  .room-create-row{grid-template-columns:minmax(0,1fr) 92px!important}
+  .main-content>.topbar .top-actions{right:9px!important;top:9px!important}
+  .main-content>.topbar .notification-btn{width:40px!important;height:40px!important;min-height:40px!important;border-radius:12px!important}
+  .main-content>.topbar .mini-profile{width:40px!important;height:40px!important;min-height:40px!important;padding:3px!important;border-radius:12px!important}
+  .main-content>.topbar .avatar.mini{width:32px!important;height:32px!important;min-width:32px!important}
+}
