@@ -197,3 +197,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Reproductor flotante renovado y cola/chat más claros.
 - Diseño responsive para tablet y móvil con controles táctiles más cómodos.
 - Conserva las funciones de V91: invitaciones, roles, permisos y votación para saltar.
+
+
+## V96 - Corrección visual
+- Los colores Aurora ahora usan las variables de todos los temas existentes.
+- Se eliminó la barra superior vacía.
+- Perfil y notificaciones quedaron flotando en la esquina superior derecha.
+- Se conservan IDs, eventos y funciones de la V91.
