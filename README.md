@@ -222,3 +222,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 ## V99
 - Selector de tipo de sala personalizado, sin menú nativo del navegador.
 - Opciones Pública y Privada con descripción, iconos y estilos compatibles con los temas.
+
+
+## THESO V100
+- Eliminado el doble fondo del selector de tipo de sala.
+- Menú desplegable corregido para no superponerse con controles vecinos.
+- Perfil superior rediseñado para mostrar foto y banner guardados.
+- Mejoras de capas, contraste y adaptación móvil.
