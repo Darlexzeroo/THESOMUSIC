@@ -249,11 +249,17 @@
         <aside class="friends-voice-panel private-call-side">
           <section class="private-call-widget">
             <header><div><span class="eyebrow">LLAMADA PRIVADA</span><h2 id="privateCallPanelTitle">Sin llamada activa</h2><small id="privateCallPanelStatus">Selecciona un amigo y presiona Llamar.</small></div><span id="privateCallLiveDot" class="private-call-live-dot"></span></header>
+            <div id="privateCallMedia" class="private-call-media hidden">
+              <div id="privateRemoteVideos" class="private-remote-videos"></div>
+              <video id="privateLocalVideo" class="private-local-video hidden" autoplay muted playsinline></video>
+            </div>
             <div id="privateCallPanelAvatar" class="private-call-panel-avatar">☎</div>
             <strong id="privateCallPanelName">Llamadas uno a uno</strong>
             <p id="privateCallPanelHint">Aquí aparecerán los controles cuando estés en una llamada privada.</p>
-            <div class="private-call-panel-actions">
+            <div class="private-call-panel-actions private-call-panel-actions-media">
               <button id="privateCallPanelMute" type="button" disabled>🔇 Silenciar</button>
+              <button id="privateCallCamera" type="button" disabled>📷 Cámara</button>
+              <button id="privateCallScreen" type="button" disabled>🖥 Compartir</button>
               <button id="privateCallPanelHangup" type="button" disabled>📞 Colgar</button>
             </div>
             <label class="voice-volume-control" for="privateCallVolumeBar">
@@ -281,12 +287,13 @@
       <form id="profileForm" class="profile-form">
         <section id="profileSettingsPanel" class="settings-panel active" data-settings-panel="profile">
           <div class="profile-visual-preview">
-            <div id="profileBannerPreview" class="profile-banner-preview"><span>Banner de perfil</span></div>
-            <div id="profilePreview" class="avatar avatar-large profile-preview-avatar">U</div>
+            <button id="editProfileBanner" class="profile-banner-preview profile-media-edit" type="button"><span>Banner de perfil</span><i>✎ Editar banner</i></button>
+            <button id="editProfilePhoto" class="avatar avatar-large profile-preview-avatar profile-media-edit" type="button" aria-label="Editar foto de perfil">U</button>
             <div class="profile-preview-copy"><strong id="profilePreviewName">USER</strong><small>En línea</small></div>
           </div>
-          <div class="profile-photo-zone"><div class="profile-upload-icon">◎</div><div><strong>Foto de perfil</strong><small>JPG, PNG, WEBP o GIF animado · máximo 5 MB</small><div class="photo-actions"><label for="profilePhoto">Elegir imagen</label><input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button id="removePhoto" type="button">Quitar</button></div></div></div>
-          <div class="profile-photo-zone"><div class="profile-upload-icon banner-icon">▭</div><div><strong>Banner de perfil</strong><small>JPG, PNG, WEBP o GIF · recomendado 600 × 240 · máximo 5 MB</small><div class="photo-actions"><label for="profileBanner">Elegir banner</label><input id="profileBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden><button id="removeBanner" type="button">Quitar</button></div></div></div>
+          <input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <input id="profileBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <div class="profile-media-hint">Haz clic sobre la foto o el banner para cambiarlo y acomodarlo antes de guardar.</div>
           <div class="discord-login-card" id="discordLoginCard">
             <div class="discord-login-icon" aria-hidden="true">☯</div>
             <div class="discord-login-copy"><strong id="discordLoginTitle">Cuenta de Discord</strong><small id="discordLoginStatus">Inicia sesión para usar automáticamente tu nombre y avatar.</small></div>
@@ -336,8 +343,25 @@
 
   <div id="imageViewer" class="image-viewer hidden"><button id="closeImageViewer" type="button" aria-label="Cerrar">×</button><img id="imageViewerImg" alt="Imagen del chat"></div>
   <div id="toast" class="toast hidden"></div>
+  <div id="imageEditorModal" class="image-editor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="imageEditorTitle">
+    <div class="image-editor-backdrop" data-close-image-editor></div>
+    <section class="image-editor-card">
+      <header><div><span class="eyebrow">EDITOR DE IMAGEN</span><h2 id="imageEditorTitle">Ajustar imagen</h2><p id="imageEditorHelp">Arrastra la imagen para acomodarla.</p></div><button id="closeImageEditor" type="button" aria-label="Cerrar">×</button></header>
+      <div id="imageEditorViewport" class="image-editor-viewport"><canvas id="imageEditorCanvas"></canvas><div class="image-editor-guide"></div></div>
+      <div class="image-editor-controls">
+        <label><span>Zoom</span><input id="imageEditorZoom" type="range" min="1" max="3" step="0.01" value="1"></label>
+        <button id="imageEditorRotate" type="button">↻ Girar</button>
+        <button id="imageEditorReset" type="button">Restablecer</button>
+      </div>
+      <footer><button id="imageEditorRemove" type="button" class="danger">Quitar imagen</button><span></span><button id="imageEditorCancel" type="button">Cancelar</button><button id="imageEditorApply" type="button" class="primary">Aplicar</button></footer>
+    </section>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/app.js"></script>
+
+
+
 </body>
 </html>

@@ -236,3 +236,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Oculta correctamente los paneles de sala al guardar el menú.
 - Tooltips limpios para los iconos.
 - Selector de tipo de sala más compacto, sin bordes duplicados y con despliegue refinado.
+
+## V102
+- Editor integrado para recortar, mover, ampliar y girar la foto de perfil y el banner.
+- La foto y el banner se cambian directamente desde la vista previa, sin tarjetas de carga separadas.
+- Las llamadas privadas ahora incluyen cámara y compartir pantalla mediante WebRTC.
+- Vista local y video remoto integrados en el panel de llamada.

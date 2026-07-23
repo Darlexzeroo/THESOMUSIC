@@ -52,6 +52,10 @@ let privateCallPeer = null;
 let privateCallTargetId = null;
 let incomingPrivateCallerId = null;
 let privateCallActive = false;
+let privateCameraStream = null;
+let privateScreenStream = null;
+let privateCameraSender = null;
+let privateScreenSender = null;
 const rtcConfig = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -540,7 +544,10 @@ function updatePrivateCallPanel(active = privateCallActive, text = $("privateCal
   if ($("privateCallPanelAvatar")) $("privateCallPanelAvatar").textContent = active ? initial : "☎";
   if ($("privateCallPanelHint")) $("privateCallPanelHint").textContent = active ? "La llamada es privada entre ustedes dos." : "Aquí aparecerán los controles cuando estés en una llamada privada.";
   if ($("privateCallPanelMute")) $("privateCallPanelMute").disabled = !active;
+  if ($("privateCallCamera")) $("privateCallCamera").disabled = !active;
+  if ($("privateCallScreen")) $("privateCallScreen").disabled = !active;
   if ($("privateCallPanelHangup")) $("privateCallPanelHangup").disabled = !active;
+  $("privateCallMedia")?.classList.toggle("hidden", !active || (!privateCameraStream && !privateScreenStream && !$("privateRemoteVideos")?.children.length));
 }
 
 function setPrivateCallUi(active, text = "Chat privado") {
@@ -555,6 +562,7 @@ function closePrivateCallPeer() {
   try { privateCallPeer?.close(); } catch {}
   privateCallPeer = null;
   document.getElementById("private-call-audio")?.remove();
+  $("privateRemoteVideos")?.replaceChildren();
 }
 
 function createPrivateCallPeer(targetId) {
@@ -566,16 +574,114 @@ function createPrivateCallPeer(targetId) {
     if (event.candidate && currentRoom && privateCallTargetId) socket.emit("private-call-signal", { code: currentRoom.code, target: privateCallTargetId, data: { type: "candidate", candidate: event.candidate } });
   };
   peer.ontrack = event => {
-    let audio = document.getElementById("private-call-audio");
-    if (!audio) { audio = document.createElement("audio"); audio.id = "private-call-audio"; audio.autoplay = true; audio.playsInline = true; $("remoteAudios").appendChild(audio); }
-    audio.srcObject = event.streams[0];
-    audio.volume = voiceOutputVolume / 100;
-    audio.play().catch(() => notify("Toca la pantalla para activar el audio."));
+    if (event.track.kind === "audio") {
+      let audio = document.getElementById("private-call-audio");
+      if (!audio) { audio = document.createElement("audio"); audio.id = "private-call-audio"; audio.autoplay = true; audio.playsInline = true; $("remoteAudios").appendChild(audio); }
+      audio.srcObject = new MediaStream([event.track]);
+      audio.volume = voiceOutputVolume / 100;
+      audio.play().catch(() => notify("Toca la pantalla para activar el audio."));
+      return;
+    }
+    if (event.track.kind === "video") {
+      const holder = $("privateRemoteVideos");
+      let video = document.getElementById(`private-remote-video-${event.track.id}`);
+      if (!video) {
+        video = document.createElement("video");
+        video.id = `private-remote-video-${event.track.id}`;
+        video.className = "private-remote-video";
+        video.autoplay = true;
+        video.playsInline = true;
+        holder?.appendChild(video);
+      }
+      video.srcObject = new MediaStream([event.track]);
+      video.play().catch(() => {});
+      event.track.addEventListener("ended", () => video.remove(), { once: true });
+      $("privateCallMedia")?.classList.remove("hidden");
+      $("privateCallPanelAvatar")?.classList.add("hidden");
+    }
   };
   peer.onconnectionstatechange = () => {
     if (["failed","closed","disconnected"].includes(peer.connectionState)) endPrivateCall(false);
   };
   return peer;
+}
+
+async function renegotiatePrivateCall() {
+  const peer = privateCallPeer;
+  if (!peer || !currentRoom || !privateCallTargetId || peer.signalingState !== "stable") return;
+  try {
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socket.emit("private-call-signal", { code: currentRoom.code, target: privateCallTargetId, data: { type: "offer", sdp: peer.localDescription } });
+  } catch (error) { console.error("Renegociación privada:", error); }
+}
+
+function updatePrivateVideoUi() {
+  const local = $("privateLocalVideo");
+  const activeStream = privateScreenStream || privateCameraStream;
+  if (local) {
+    local.srcObject = activeStream || null;
+    local.classList.toggle("hidden", !activeStream);
+    if (activeStream) local.play().catch(() => {});
+  }
+  $("privateCallCamera")?.classList.toggle("is-active", Boolean(privateCameraStream));
+  $("privateCallScreen")?.classList.toggle("is-active", Boolean(privateScreenStream));
+  if ($("privateCallCamera")) $("privateCallCamera").textContent = privateCameraStream ? "📷 Apagar" : "📷 Cámara";
+  if ($("privateCallScreen")) $("privateCallScreen").textContent = privateScreenStream ? "⏹ Dejar de compartir" : "🖥 Compartir";
+  const hasRemote = Boolean($("privateRemoteVideos")?.children.length);
+  $("privateCallMedia")?.classList.toggle("hidden", !privateCallActive || (!activeStream && !hasRemote));
+  $("privateCallPanelAvatar")?.classList.toggle("hidden", Boolean(activeStream || hasRemote));
+}
+
+async function togglePrivateCamera() {
+  if (!privateCallActive || !privateCallPeer) return;
+  if (privateCameraStream) {
+    privateCameraStream.getTracks().forEach(track => track.stop());
+    if (privateCameraSender) privateCallPeer.removeTrack(privateCameraSender);
+    privateCameraStream = null; privateCameraSender = null;
+    updatePrivateVideoUi();
+    return renegotiatePrivateCall();
+  }
+  try {
+    privateCameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+    const track = privateCameraStream.getVideoTracks()[0];
+    privateCameraSender = privateCallPeer.addTrack(track, privateCameraStream);
+    track.addEventListener("ended", () => { privateCameraStream = null; privateCameraSender = null; updatePrivateVideoUi(); }, { once: true });
+    updatePrivateVideoUi();
+    await renegotiatePrivateCall();
+  } catch { notify("No se pudo activar la cámara. Revisa el permiso del navegador."); }
+}
+
+async function togglePrivateScreen() {
+  if (!privateCallActive || !privateCallPeer) return;
+  if (privateScreenStream) {
+    privateScreenStream.getTracks().forEach(track => track.stop());
+    if (privateScreenSender) privateCallPeer.removeTrack(privateScreenSender);
+    privateScreenStream = null; privateScreenSender = null;
+    updatePrivateVideoUi();
+    return renegotiatePrivateCall();
+  }
+  try {
+    privateScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 60 } }, audio: false });
+    const track = privateScreenStream.getVideoTracks()[0];
+    privateScreenSender = privateCallPeer.addTrack(track, privateScreenStream);
+    track.addEventListener("ended", async () => {
+      if (privateScreenSender && privateCallPeer) { try { privateCallPeer.removeTrack(privateScreenSender); } catch {} }
+      privateScreenStream = null; privateScreenSender = null; updatePrivateVideoUi(); await renegotiatePrivateCall();
+    }, { once: true });
+    updatePrivateVideoUi();
+    await renegotiatePrivateCall();
+  } catch (error) { if (error?.name !== "NotAllowedError") notify("No se pudo compartir la pantalla."); }
+}
+
+function stopPrivateVideoMedia() {
+  privateCameraStream?.getTracks().forEach(track => track.stop());
+  privateScreenStream?.getTracks().forEach(track => track.stop());
+  privateCameraStream = null; privateScreenStream = null;
+  privateCameraSender = null; privateScreenSender = null;
+  if ($("privateLocalVideo")) $("privateLocalVideo").srcObject = null;
+  $("privateRemoteVideos")?.replaceChildren();
+  updatePrivateVideoUi();
 }
 
 async function startPrivateCall() {
@@ -615,6 +721,7 @@ function endPrivateCall(notifyServer = true) {
   if (notifyServer && currentRoom && privateCallTargetId) socket.emit("private-call-end", { code: currentRoom.code, target: privateCallTargetId });
   closePrivateCallPeer();
   privateCallTargetId = null;
+  stopPrivateVideoMedia();
   voiceMuted = false;
   if ($("privateCallPanelMute")) $("privateCallPanelMute").textContent = "🔇 Silenciar";
   setPrivateCallUi(false, "Chat privado");
@@ -2702,6 +2809,8 @@ $("privateHangupBtn").addEventListener("click", () => endPrivateCall(true));
 $("acceptPrivateCall").addEventListener("click", acceptPrivateCallInvite);
 $("rejectPrivateCall").addEventListener("click", rejectPrivateCallInvite);
 $("privateCallPanelHangup").addEventListener("click", () => endPrivateCall(true));
+$("privateCallCamera").addEventListener("click", togglePrivateCamera);
+$("privateCallScreen").addEventListener("click", togglePrivateScreen);
 $("privateCallPanelMute").addEventListener("click", () => {
   if (!privateCallActive || !voiceStream) return;
   voiceMuted = !voiceMuted;
@@ -2756,45 +2865,87 @@ $("closeProfile").addEventListener("click", closeProfileModal);
 $("cancelProfile").addEventListener("click", closeProfileModal);
 $("profileModal").querySelector("[data-close-profile]").addEventListener("click", closeProfileModal);
 
-$("profilePhoto").addEventListener("change", async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  if (file.size > 5 * 1024 * 1024) {
-    event.target.value = "";
-    return notify("La foto debe pesar menos de 5 MB.");
-  }
+const profileImageEditor = {
+  mode: "avatar", image: null, fileName: "", zoom: 1, rotation: 0, offsetX: 0, offsetY: 0,
+  dragging: false, lastX: 0, lastY: 0
+};
 
-  try {
-    profilePhotoData = await prepareProfileImage(file, "avatar");
-    applyAvatar($("profilePreview"));
-  } catch (error) {
-    notify(error.message);
-  }
-});
+function imageEditorSize() { return profileImageEditor.mode === "avatar" ? [720, 720] : [1200, 480]; }
 
-$("removePhoto").addEventListener("click", () => {
-  profilePhotoData = "";
-  $("profilePhoto").value = "";
-  applyAvatar($("profilePreview"));
-});
+function renderImageEditor() {
+  const canvas = $("imageEditorCanvas");
+  const ctx = canvas?.getContext("2d");
+  const image = profileImageEditor.image;
+  if (!canvas || !ctx || !image) return;
+  const [w,h] = imageEditorSize(); canvas.width = w; canvas.height = h;
+  ctx.clearRect(0,0,w,h); ctx.save(); ctx.translate(w/2 + profileImageEditor.offsetX, h/2 + profileImageEditor.offsetY); ctx.rotate(profileImageEditor.rotation * Math.PI / 180);
+  const rotated = Math.abs(profileImageEditor.rotation % 180) === 90;
+  const iw = rotated ? image.naturalHeight : image.naturalWidth;
+  const ih = rotated ? image.naturalWidth : image.naturalHeight;
+  const base = Math.max(w / iw, h / ih);
+  const scale = base * profileImageEditor.zoom;
+  ctx.drawImage(image, -image.naturalWidth*scale/2, -image.naturalHeight*scale/2, image.naturalWidth*scale, image.naturalHeight*scale);
+  ctx.restore();
+}
 
-$("profileBanner").addEventListener("change", async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    profileBannerData = await prepareProfileImage(file, "banner");
-    applyProfileBanner($("profileBannerPreview"));
-  } catch (error) {
-    event.target.value = "";
-    notify(error.message);
-  }
-});
+function openImageEditor(file, mode) {
+  if (!file || file.size > 5 * 1024 * 1024) return notify("La imagen debe pesar menos de 5 MB.");
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      Object.assign(profileImageEditor, { mode, image, fileName: file.name, zoom: 1, rotation: 0, offsetX: 0, offsetY: 0 });
+      $("imageEditorZoom").value = "1";
+      $("imageEditorTitle").textContent = mode === "avatar" ? "Ajustar foto de perfil" : "Ajustar banner";
+      $("imageEditorHelp").textContent = mode === "avatar" ? "Arrastra y acerca la imagen dentro del recorte circular." : "Arrastra y acerca la imagen para llenar el banner.";
+      $("imageEditorViewport").classList.toggle("avatar-mode", mode === "avatar");
+      $("imageEditorModal").classList.remove("hidden");
+      document.body.classList.add("modal-open");
+      requestAnimationFrame(renderImageEditor);
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
 
-$("removeBanner").addEventListener("click", () => {
-  profileBannerData = "";
-  $("profileBanner").value = "";
-  applyProfileBanner($("profileBannerPreview"));
-});
+function closeImageEditor() {
+  $("imageEditorModal").classList.add("hidden");
+  if ($("profileModal").classList.contains("hidden")) document.body.classList.remove("modal-open");
+}
+
+function applyEditedProfileImage() {
+  const canvas = $("imageEditorCanvas");
+  if (!canvas || !profileImageEditor.image) return;
+  const data = canvas.toDataURL("image/webp", .9);
+  if (profileImageEditor.mode === "avatar") { profilePhotoData = data; applyAvatar($("profilePreview")); }
+  else { profileBannerData = data; applyProfileBanner($("profileBannerPreview")); }
+  closeImageEditor();
+}
+
+function removeEditedProfileImage() {
+  if (profileImageEditor.mode === "avatar") { profilePhotoData = ""; $("profilePhoto").value = ""; applyAvatar($("profilePreview")); }
+  else { profileBannerData = ""; $("profileBanner").value = ""; applyProfileBanner($("profileBannerPreview")); }
+  closeImageEditor();
+}
+
+$("editProfilePhoto").addEventListener("click", () => $("profilePhoto").click());
+$("editProfileBanner").addEventListener("click", () => $("profileBanner").click());
+$("profilePhoto").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) openImageEditor(file, "avatar"); });
+$("profileBanner").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) openImageEditor(file, "banner"); });
+$("closeImageEditor").addEventListener("click", closeImageEditor);
+$("imageEditorCancel").addEventListener("click", closeImageEditor);
+$("imageEditorModal").querySelector("[data-close-image-editor]").addEventListener("click", closeImageEditor);
+$("imageEditorApply").addEventListener("click", applyEditedProfileImage);
+$("imageEditorRemove").addEventListener("click", removeEditedProfileImage);
+$("imageEditorReset").addEventListener("click", () => { Object.assign(profileImageEditor,{ zoom:1,rotation:0,offsetX:0,offsetY:0 }); $("imageEditorZoom").value="1"; renderImageEditor(); });
+$("imageEditorRotate").addEventListener("click", () => { profileImageEditor.rotation = (profileImageEditor.rotation + 90) % 360; profileImageEditor.offsetX=0; profileImageEditor.offsetY=0; renderImageEditor(); });
+$("imageEditorZoom").addEventListener("input", event => { profileImageEditor.zoom = Number(event.target.value); renderImageEditor(); });
+const editorViewport = $("imageEditorViewport");
+editorViewport.addEventListener("pointerdown", event => { profileImageEditor.dragging=true; profileImageEditor.lastX=event.clientX; profileImageEditor.lastY=event.clientY; editorViewport.setPointerCapture(event.pointerId); });
+editorViewport.addEventListener("pointermove", event => { if (!profileImageEditor.dragging) return; const canvas=$("imageEditorCanvas"); const rect=canvas.getBoundingClientRect(); profileImageEditor.offsetX += (event.clientX-profileImageEditor.lastX)*(canvas.width/rect.width); profileImageEditor.offsetY += (event.clientY-profileImageEditor.lastY)*(canvas.height/rect.height); profileImageEditor.lastX=event.clientX; profileImageEditor.lastY=event.clientY; renderImageEditor(); });
+editorViewport.addEventListener("pointerup", () => { profileImageEditor.dragging=false; });
+editorViewport.addEventListener("pointercancel", () => { profileImageEditor.dragging=false; });
+editorViewport.addEventListener("wheel", event => { event.preventDefault(); profileImageEditor.zoom=Math.max(1,Math.min(3,profileImageEditor.zoom+(event.deltaY<0?.08:-.08))); $("imageEditorZoom").value=String(profileImageEditor.zoom); renderImageEditor(); }, { passive:false });
 
 username.addEventListener("input", () => {
   applyAvatar($("profilePreview"), getName(), profilePhotoData);
