@@ -247,3 +247,10 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Corrige la aplicación inmediata y persistente del banner en la vista de perfil.
 - Rediseña los botones de edición de foto y banner con iconos discretos de cámara.
 - Actualiza todas las vistas del perfil al aplicar o quitar una imagen.
+
+
+## V105 · PWA instalable
+- Instalación en Windows y Android mediante el aviso del navegador.
+- Compatibilidad con Agregar a pantalla de inicio en iPhone/iPad.
+- Manifest, iconos, modo standalone y service worker.
+- La API, autenticación y Socket.IO quedan fuera de la caché para evitar sesiones desactualizadas.

@@ -1,8 +1,8 @@
 {
   "name": "waveroom-youtube",
-  "version": "104.0.0",
+  "version": "105.0.0",
   "private": true,
-  "description": "THESO V91 con invitaciones privadas, roles de sala y votación para saltar",
+  "description": "THESO V105 PWA instalable para Windows, Android y iPhone",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

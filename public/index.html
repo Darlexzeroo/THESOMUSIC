@@ -6,7 +6,14 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>THESO</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta name="theme-color" content="#07111f">
+  <meta name="theme-color" content="#6d3be8">
+  <meta name="application-name" content="THESO">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="THESO">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -343,6 +350,19 @@
 
   <div id="imageViewer" class="image-viewer hidden"><button id="closeImageViewer" type="button" aria-label="Cerrar">×</button><img id="imageViewerImg" alt="Imagen del chat"></div>
   <div id="toast" class="toast hidden"></div>
+  <button id="installPwaButton" class="pwa-install-button hidden" type="button" aria-label="Instalar THESO como aplicación">
+    <span aria-hidden="true">⬇</span><strong>Instalar THESO</strong>
+  </button>
+  <div id="pwaInstallGuide" class="pwa-install-guide hidden" role="dialog" aria-modal="true" aria-labelledby="pwaGuideTitle">
+    <section>
+      <button id="closePwaGuide" type="button" aria-label="Cerrar">×</button>
+      <div class="pwa-guide-icon">◢◣</div>
+      <h2 id="pwaGuideTitle">Instalar THESO</h2>
+      <p>En iPhone o iPad, abre THESO en Safari, toca <strong>Compartir</strong> y selecciona <strong>Agregar a pantalla de inicio</strong>.</p>
+      <small>En Windows y Android aparecerá el botón de instalación del navegador automáticamente.</small>
+    </section>
+  </div>
+
   <div id="imageEditorModal" class="image-editor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="imageEditorTitle">
     <div class="image-editor-backdrop" data-close-image-editor></div>
     <section class="image-editor-card">
@@ -360,6 +380,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/app.js"></script>
+  <script src="/pwa.js"></script>
 
 
 

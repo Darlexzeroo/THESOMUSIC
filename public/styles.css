@@ -4690,3 +4690,15 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .profile-banner-preview.profile-media-edit i{right:10px!important;top:10px!important;width:34px!important;height:34px!important}
   .profile-preview-avatar.profile-media-edit::after{width:25px!important;height:25px!important;font-size:11px!important}
 }
+
+/* THESO V105 · PWA instalable */
+.pwa-install-button{position:fixed;right:18px;bottom:92px;z-index:9997;display:flex;align-items:center;gap:9px;min-height:44px;padding:10px 15px;border:1px solid color-mix(in srgb,var(--accent,#6d3be8) 60%,transparent);border-radius:14px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent,#6d3be8) 88%,#fff 12%),color-mix(in srgb,var(--accent,#6d3be8) 70%,#06101e 30%));box-shadow:0 12px 38px color-mix(in srgb,var(--accent,#6d3be8) 35%,transparent);color:#fff;cursor:pointer;font:inherit}
+.pwa-install-button:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.pwa-install-button span{font-size:18px}.pwa-install-button strong{font-size:13px}
+.pwa-install-guide{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:20px;background:rgba(1,3,12,.74);backdrop-filter:blur(14px)}
+.pwa-install-guide>section{position:relative;width:min(420px,100%);padding:30px;border:1px solid color-mix(in srgb,var(--accent,#6d3be8) 48%,#fff 8%);border-radius:24px;background:linear-gradient(155deg,color-mix(in srgb,var(--panel,#0b1020) 92%,var(--accent,#6d3be8) 8%),#070a15);box-shadow:0 28px 90px rgba(0,0,0,.55);text-align:center}
+.pwa-install-guide button{position:absolute;right:14px;top:12px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.07);color:#fff;font-size:24px;cursor:pointer}
+.pwa-guide-icon{display:grid;place-items:center;width:72px;height:72px;margin:0 auto 16px;border-radius:22px;background:linear-gradient(135deg,var(--accent,#6d3be8),#2b6cff);color:#fff;font-size:24px;font-weight:900;box-shadow:0 14px 34px color-mix(in srgb,var(--accent,#6d3be8) 30%,transparent)}
+.pwa-install-guide h2{margin:0 0 10px}.pwa-install-guide p{margin:0 0 13px;line-height:1.55;color:var(--text,#eef3ff)}.pwa-install-guide small{display:block;line-height:1.5;color:var(--muted,#99a3b8)}
+@media(max-width:720px){.pwa-install-button{right:12px;bottom:calc(82px + env(safe-area-inset-bottom));min-width:44px;padding:11px}.pwa-install-button strong{display:none}}
+@media(display-mode:standalone){.pwa-install-button{display:none!important}body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}}
