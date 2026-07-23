@@ -4436,3 +4436,172 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .image-editor-card{padding:15px;border-radius:18px}.image-editor-controls{grid-template-columns:1fr 1fr}.image-editor-controls label{grid-column:1/-1}.image-editor-card footer{grid-template-columns:1fr 1fr}.image-editor-card footer span{display:none}.image-editor-card footer .danger{grid-column:1/-1}
   .private-local-video{width:96px}.private-call-panel-actions.private-call-panel-actions-media{grid-template-columns:1fr 1fr}
 }
+
+
+/* ======================================================================
+   THESO V103 — corrección completa de la vista de perfil
+   ====================================================================== */
+.profile-visual-preview{
+  position:relative!important;
+  min-height:300px!important;
+  margin:18px 0 16px!important;
+  border:1px solid color-mix(in srgb,var(--green) 18%,var(--line))!important;
+  border-radius:22px!important;
+  overflow:hidden!important;
+  background:linear-gradient(180deg,var(--panel2),var(--panel))!important;
+  box-shadow:0 20px 45px rgba(0,0,0,.25)!important;
+}
+.profile-banner-preview.profile-media-edit{
+  position:absolute!important;
+  inset:0 0 auto 0!important;
+  width:100%!important;
+  height:178px!important;
+  min-height:178px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background-image:linear-gradient(135deg,color-mix(in srgb,var(--purple) 78%,#182742),#182742 72%)!important;
+  background-position:center!important;
+  background-size:cover!important;
+  color:#fff!important;
+  overflow:hidden!important;
+}
+.profile-banner-preview.profile-media-edit::after{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  background:linear-gradient(180deg,rgba(2,5,12,.04) 25%,rgba(2,5,12,.18) 58%,rgba(2,5,12,.86) 100%)!important;
+  pointer-events:none!important;
+}
+.profile-banner-preview.profile-media-edit .profile-banner-empty{
+  position:absolute!important;
+  left:22px!important;
+  top:22px!important;
+  z-index:2!important;
+  padding:7px 10px!important;
+  border-radius:999px!important;
+  background:rgba(5,8,15,.42)!important;
+  border:1px solid rgba(255,255,255,.16)!important;
+  color:rgba(255,255,255,.84)!important;
+  font-size:10px!important;
+  font-weight:800!important;
+  letter-spacing:.06em!important;
+  text-transform:uppercase!important;
+  backdrop-filter:blur(10px)!important;
+}
+.profile-banner-preview.has-image .profile-banner-empty{display:none!important}
+.profile-banner-preview.profile-media-edit i{
+  right:16px!important;
+  top:16px!important;
+  z-index:3!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  padding:8px 11px!important;
+  border-radius:11px!important;
+  background:rgba(5,8,15,.72)!important;
+  border:1px solid rgba(255,255,255,.18)!important;
+  box-shadow:0 8px 20px rgba(0,0,0,.25)!important;
+  opacity:1!important;
+  text-transform:none!important;
+  letter-spacing:0!important;
+}
+.profile-preview-avatar.profile-media-edit{
+  position:absolute!important;
+  left:26px!important;
+  top:124px!important;
+  z-index:4!important;
+  width:104px!important;
+  height:104px!important;
+  min-width:104px!important;
+  padding:0!important;
+  border:6px solid var(--panel)!important;
+  border-radius:50%!important;
+  background-position:center!important;
+  background-size:cover!important;
+  box-shadow:0 14px 30px rgba(0,0,0,.45),0 0 0 1px color-mix(in srgb,var(--green) 28%,transparent)!important;
+}
+.profile-preview-avatar.profile-media-edit::after{
+  content:"✎"!important;
+  right:-1px!important;
+  bottom:1px!important;
+  width:30px!important;
+  height:30px!important;
+  border:4px solid var(--panel)!important;
+  background:var(--green)!important;
+}
+.profile-preview-copy{
+  position:absolute!important;
+  left:148px!important;
+  right:22px!important;
+  bottom:28px!important;
+  z-index:4!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:end!important;
+  gap:5px 14px!important;
+}
+.profile-preview-copy strong{
+  grid-column:1!important;
+  font-size:23px!important;
+  line-height:1.1!important;
+}
+.profile-preview-copy small{
+  grid-column:1!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  color:var(--muted)!important;
+}
+.profile-preview-copy small i{
+  width:8px!important;
+  height:8px!important;
+  border-radius:50%!important;
+  background:#39d875!important;
+  box-shadow:0 0 10px rgba(57,216,117,.65)!important;
+}
+.profile-preview-copy button{
+  grid-column:2!important;
+  grid-row:1/3!important;
+  align-self:center!important;
+  min-height:38px!important;
+  padding:0 14px!important;
+  border:1px solid color-mix(in srgb,var(--green) 26%,var(--line))!important;
+  border-radius:11px!important;
+  background:color-mix(in srgb,var(--green) 8%,var(--panel2))!important;
+  color:var(--text)!important;
+  font-size:12px!important;
+  font-weight:800!important;
+}
+.profile-media-hint{
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+  margin:0 0 16px!important;
+  padding:13px 15px!important;
+  text-align:left!important;
+  background:color-mix(in srgb,var(--panel2) 92%,var(--green) 8%)!important;
+}
+.profile-media-hint>span{
+  display:grid!important;
+  place-items:center!important;
+  width:34px!important;
+  height:34px!important;
+  flex:0 0 34px!important;
+  border-radius:11px!important;
+  background:color-mix(in srgb,var(--green) 15%,transparent)!important;
+  color:var(--green)!important;
+}
+.profile-media-hint>div{display:grid!important;gap:3px!important}
+.profile-media-hint strong{color:var(--text)!important;font-size:12px!important}
+.profile-media-hint small{color:var(--muted)!important;font-size:10px!important}
+
+@media(max-width:600px){
+  .profile-visual-preview{min-height:270px!important;border-radius:18px!important}
+  .profile-banner-preview.profile-media-edit{height:150px!important;min-height:150px!important}
+  .profile-preview-avatar.profile-media-edit{left:18px!important;top:103px!important;width:88px!important;height:88px!important;min-width:88px!important;border-width:5px!important}
+  .profile-preview-copy{left:18px!important;right:18px!important;bottom:18px!important;padding-left:102px!important;grid-template-columns:minmax(0,1fr)!important}
+  .profile-preview-copy button{display:none!important}
+  .profile-preview-copy strong{font-size:19px!important}
+  .profile-banner-preview.profile-media-edit i{right:10px!important;top:10px!important;font-size:10px!important}
+}

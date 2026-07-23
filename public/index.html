@@ -287,13 +287,13 @@
       <form id="profileForm" class="profile-form">
         <section id="profileSettingsPanel" class="settings-panel active" data-settings-panel="profile">
           <div class="profile-visual-preview">
-            <button id="editProfileBanner" class="profile-banner-preview profile-media-edit" type="button"><span>Banner de perfil</span><i>✎ Editar banner</i></button>
+            <button id="editProfileBanner" class="profile-banner-preview profile-media-edit" type="button" aria-label="Editar banner"><span class="profile-banner-empty">Agregar banner</span><i><span>✎</span> Cambiar banner</i></button>
             <button id="editProfilePhoto" class="avatar avatar-large profile-preview-avatar profile-media-edit" type="button" aria-label="Editar foto de perfil">U</button>
-            <div class="profile-preview-copy"><strong id="profilePreviewName">USER</strong><small>En línea</small></div>
+            <div class="profile-preview-copy"><strong id="profilePreviewName">USER</strong><small><i></i> En línea</small><button id="profileQuickEdit" type="button">Editar perfil</button></div>
           </div>
           <input id="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
           <input id="profileBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-          <div class="profile-media-hint">Haz clic sobre la foto o el banner para cambiarlo y acomodarlo antes de guardar.</div>
+          <div class="profile-media-hint"><span>✦</span><div><strong>Personaliza tu perfil</strong><small>Presiona la foto o el banner para cambiar y recortar la imagen.</small></div></div>
           <div class="discord-login-card" id="discordLoginCard">
             <div class="discord-login-icon" aria-hidden="true">☯</div>
             <div class="discord-login-copy"><strong id="discordLoginTitle">Cuenta de Discord</strong><small id="discordLoginStatus">Inicia sesión para usar automáticamente tu nombre y avatar.</small></div>

@@ -366,8 +366,8 @@ function refreshProfileUI() {
   applyAvatar($("avatar"));
   applyAvatar($("miniAvatar"));
   applyProfileBanner($("miniProfileBanner"));
-  applyAvatar($("profilePreview"));
-  applyProfileBanner($("profileBannerPreview"));
+  applyAvatar($("editProfilePhoto"));
+  applyProfileBanner($("editProfileBanner"));
   applyProfileBanner($("profileCardBanner"));
   document.documentElement.style.setProperty("--profile-banner-image", profileBannerData ? `url("${profileBannerData}")` : "none");
 }
@@ -2917,14 +2917,14 @@ function applyEditedProfileImage() {
   const canvas = $("imageEditorCanvas");
   if (!canvas || !profileImageEditor.image) return;
   const data = canvas.toDataURL("image/webp", .9);
-  if (profileImageEditor.mode === "avatar") { profilePhotoData = data; applyAvatar($("profilePreview")); }
-  else { profileBannerData = data; applyProfileBanner($("profileBannerPreview")); }
+  if (profileImageEditor.mode === "avatar") { profilePhotoData = data; applyAvatar($("editProfilePhoto")); }
+  else { profileBannerData = data; applyProfileBanner($("editProfileBanner")); }
   closeImageEditor();
 }
 
 function removeEditedProfileImage() {
-  if (profileImageEditor.mode === "avatar") { profilePhotoData = ""; $("profilePhoto").value = ""; applyAvatar($("profilePreview")); }
-  else { profileBannerData = ""; $("profileBanner").value = ""; applyProfileBanner($("profileBannerPreview")); }
+  if (profileImageEditor.mode === "avatar") { profilePhotoData = ""; $("profilePhoto").value = ""; applyAvatar($("editProfilePhoto")); }
+  else { profileBannerData = ""; $("profileBanner").value = ""; applyProfileBanner($("editProfileBanner")); }
   closeImageEditor();
 }
 
@@ -2948,7 +2948,7 @@ editorViewport.addEventListener("pointercancel", () => { profileImageEditor.drag
 editorViewport.addEventListener("wheel", event => { event.preventDefault(); profileImageEditor.zoom=Math.max(1,Math.min(3,profileImageEditor.zoom+(event.deltaY<0?.08:-.08))); $("imageEditorZoom").value=String(profileImageEditor.zoom); renderImageEditor(); }, { passive:false });
 
 username.addEventListener("input", () => {
-  applyAvatar($("profilePreview"), getName(), profilePhotoData);
+  applyAvatar($("editProfilePhoto"), getName(), profilePhotoData);
   if ($("profilePreviewName")) $("profilePreviewName").textContent = getName();
 });
 
