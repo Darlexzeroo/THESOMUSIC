@@ -3826,3 +3826,40 @@ function reportPresenceActivity() {
   window.addEventListener("resize", update);
   update();
 })();
+
+// THESO V94: navegación inferior móvil y adaptación al teclado.
+(() => {
+  const nav = document.getElementById('mobileBottomNav');
+  if (!nav) return;
+  const buttons = [...nav.querySelectorAll('[data-mobile-action]')];
+  const setActive = (button) => {
+    buttons.forEach((item) => item.classList.toggle('active', item === button));
+  };
+  nav.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-mobile-action]');
+    if (!button) return;
+    setActive(button);
+    const action = button.dataset.mobileAction;
+    if (action === 'home') {
+      document.getElementById('homePanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (action === 'rooms') {
+      document.getElementById('focusRooms')?.click();
+    } else if (action === 'chat') {
+      const rail = document.getElementById('railRoomChat');
+      if (rail && !rail.classList.contains('hidden')) rail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else document.getElementById('friendsShortcut')?.click();
+    } else if (action === 'friends') {
+      document.getElementById('friendsShortcut')?.click();
+    } else if (action === 'profile') {
+      document.getElementById('openProfile')?.click();
+    }
+  });
+
+  const updateKeyboardState = () => {
+    if (!window.visualViewport) return;
+    const keyboardVisible = window.innerHeight - window.visualViewport.height > 160;
+    document.body.classList.toggle('keyboard-open', keyboardVisible);
+  };
+  window.visualViewport?.addEventListener('resize', updateKeyboardState);
+  window.visualViewport?.addEventListener('scroll', updateKeyboardState);
+})();

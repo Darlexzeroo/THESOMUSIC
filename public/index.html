@@ -332,6 +332,14 @@
 
   <div id="imageViewer" class="image-viewer hidden"><button id="closeImageViewer" type="button" aria-label="Cerrar">×</button><img id="imageViewerImg" alt="Imagen del chat"></div>
   <div id="toast" class="toast hidden"></div>
+
+  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegación móvil">
+    <button type="button" class="active" data-mobile-action="home"><span>⌂</span><span>Inicio</span></button>
+    <button type="button" data-mobile-action="rooms"><span>▣</span><span>Salas</span></button>
+    <button type="button" data-mobile-action="chat"><span>▢</span><span>Chat</span></button>
+    <button type="button" data-mobile-action="friends"><span>♙</span><span>Amigos</span></button>
+    <button type="button" data-mobile-action="profile"><span>◎</span><span>Perfil</span></button>
+  </nav>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="/app.js"></script>

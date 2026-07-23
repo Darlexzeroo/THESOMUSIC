@@ -213,3 +213,13 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Mini reproductor móvil y cola más compacta.
 - Diseño oscuro morado con paneles, bordes y animaciones consistentes.
 - Se conservaron los IDs y la lógica existente para evitar regresiones funcionales.
+
+
+## V94 — Rediseño Nebula
+
+- Nueva composición de escritorio de tres columnas inspirada en la maqueta aprobada.
+- Barra lateral compacta, paneles glass, cola y chat reorganizados.
+- Reproductor inferior renovado.
+- Navegación inferior para móvil.
+- Mejor adaptación al teclado virtual y controles táctiles.
+- Se conservaron los IDs y eventos existentes para mantener las funciones de V93.
