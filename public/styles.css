@@ -3860,3 +3860,186 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
   .main-content>.topbar .mini-profile{width:40px!important;height:40px!important;min-height:40px!important;padding:3px!important;border-radius:12px!important}
   .main-content>.topbar .avatar.mini{width:32px!important;height:32px!important;min-width:32px!important}
 }
+
+
+/* ======================================================================
+   THESO V98 — Perfil superior y selector de tipo de sala rediseñados
+   ====================================================================== */
+
+/* Un único control superior, sin bordes duplicados ni cápsulas anidadas */
+.main-content>.topbar .top-actions{
+  display:flex!important;
+  align-items:center!important;
+  gap:0!important;
+  min-height:48px!important;
+  padding:4px!important;
+  border:1px solid color-mix(in srgb,var(--v96-accent) 26%,rgba(255,255,255,.08))!important;
+  border-radius:17px!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--panel,#0a0f1a) 96%,transparent),color-mix(in srgb,var(--v96-accent) 5%,var(--panel,#0a0f1a)))!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.32),0 0 22px color-mix(in srgb,var(--v96-accent) 10%,transparent)!important;
+  backdrop-filter:blur(18px) saturate(135%)!important;
+}
+.main-content>.topbar .top-actions::before{
+  content:"";
+  position:absolute;
+  inset:1px;
+  border-radius:15px;
+  pointer-events:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+}
+.main-content>.topbar .notification-btn{
+  position:relative!important;
+  width:40px!important;
+  height:40px!important;
+  min-height:40px!important;
+  border:0!important;
+  border-radius:12px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--muted)!important;
+}
+.main-content>.topbar .notification-btn::after{
+  content:"";
+  position:absolute;
+  right:-1px;
+  top:8px;
+  bottom:8px;
+  width:1px;
+  background:rgba(255,255,255,.08);
+}
+.main-content>.topbar .notification-btn:hover{
+  color:var(--text)!important;
+  background:var(--v96-soft)!important;
+  transform:none!important;
+}
+.main-content>.topbar .mini-profile{
+  min-width:170px!important;
+  max-width:220px!important;
+  height:40px!important;
+  min-height:40px!important;
+  margin:0!important;
+  padding:3px 10px 3px 7px!important;
+  gap:9px!important;
+  border:0!important;
+  border-radius:12px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.main-content>.topbar .mini-profile:hover{
+  background:var(--v96-soft)!important;
+  border:0!important;
+}
+.main-content>.topbar .avatar.mini{
+  width:32px!important;
+  height:32px!important;
+  min-width:32px!important;
+  border:2px solid color-mix(in srgb,var(--v96-accent) 78%,white 8%)!important;
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--v96-accent) 13%,transparent)!important;
+}
+.main-content>.topbar .mini-profile-copy strong{
+  max-width:118px!important;
+  font-size:12.5px!important;
+  letter-spacing:.01em;
+}
+.main-content>.topbar .mini-profile-copy small{
+  display:flex!important;
+  align-items:center!important;
+  gap:5px!important;
+  font-size:9.5px!important;
+}
+.main-content>.topbar .mini-profile-copy small i{
+  width:7px!important;
+  height:7px!important;
+  margin:0!important;
+  box-shadow:0 0 8px var(--v96-accent)!important;
+}
+.main-content>.topbar .profile-chevron{
+  margin-left:auto!important;
+  opacity:.72;
+}
+
+/* Selector tipo de sala: control limpio, grande y coherente con el tema */
+.room-privacy-field{gap:7px!important}
+.room-privacy-field>span{
+  color:color-mix(in srgb,var(--text) 58%,var(--muted))!important;
+  font-size:9px!important;
+  letter-spacing:.13em!important;
+}
+.room-privacy-field>div.privacy-select-shell{
+  position:relative!important;
+  height:46px!important;
+  padding:0 12px!important;
+  gap:9px!important;
+  border:1px solid rgba(255,255,255,.09)!important;
+  border-radius:14px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.025))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important;
+  overflow:hidden;
+}
+.room-privacy-field>div.privacy-select-shell:hover{
+  border-color:color-mix(in srgb,var(--v96-accent) 46%,rgba(255,255,255,.1))!important;
+  background:color-mix(in srgb,var(--v96-accent) 7%,rgba(255,255,255,.035))!important;
+}
+.room-privacy-field>div.privacy-select-shell:focus-within{
+  border-color:var(--v96-accent)!important;
+  box-shadow:0 0 0 3px var(--v96-soft),inset 0 1px 0 rgba(255,255,255,.05)!important;
+}
+.privacy-leading{
+  width:25px;
+  height:25px;
+  flex:none;
+  display:grid;
+  place-items:center;
+  border-radius:8px;
+  background:var(--v96-soft);
+  color:var(--v96-accent);
+  font-size:13px;
+}
+.room-privacy-field select{
+  appearance:none!important;
+  -webkit-appearance:none!important;
+  flex:1!important;
+  width:100%!important;
+  height:100%!important;
+  border:0!important;
+  outline:0!important;
+  padding:0!important;
+  background:transparent!important;
+  color:var(--text)!important;
+  font-size:13px!important;
+  font-weight:750!important;
+  cursor:pointer!important;
+}
+.room-privacy-field select option{
+  background:var(--panel,#0a0f1a);
+  color:var(--text,#fff);
+}
+.privacy-arrow{
+  width:20px;
+  flex:none;
+  color:var(--muted);
+  font-size:18px;
+  line-height:1;
+  transform:translateY(-2px);
+  pointer-events:none;
+}
+.room-privacy-field>div.privacy-select-shell:focus-within .privacy-arrow{color:var(--v96-accent)}
+
+@media(max-width:760px){
+  .main-content>.topbar .top-actions{
+    min-height:44px!important;
+    padding:3px!important;
+    border-radius:15px!important;
+  }
+  .main-content>.topbar .notification-btn{width:38px!important;height:38px!important;min-height:38px!important}
+  .main-content>.topbar .mini-profile{
+    min-width:0!important;
+    width:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    padding:3px!important;
+    border-radius:11px!important;
+  }
+  .main-content>.topbar .avatar.mini{width:32px!important;height:32px!important;min-width:32px!important}
+  .room-privacy-field>div.privacy-select-shell{height:45px!important}
+}

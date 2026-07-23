@@ -211,3 +211,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Formulario de sala reorganizado y más compacto.
 - Perfil y notificaciones superiores alineados y simplificados.
 - Colores compatibles con todos los temas.
+
+
+## THESO V98
+- Perfil superior unificado y compacto, sin bordes dobles.
+- Botón de notificaciones integrado visualmente con el perfil.
+- Selector de tipo de sala completamente rediseñado y compatible con temas.
