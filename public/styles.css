@@ -4702,3 +4702,41 @@ body.sidebar-collapsed .collapse-lines i:last-child{width:17px}
 .pwa-install-guide h2{margin:0 0 10px}.pwa-install-guide p{margin:0 0 13px;line-height:1.55;color:var(--text,#eef3ff)}.pwa-install-guide small{display:block;line-height:1.5;color:var(--muted,#99a3b8)}
 @media(max-width:720px){.pwa-install-button{right:12px;bottom:calc(82px + env(safe-area-inset-bottom));min-width:44px;padding:11px}.pwa-install-button strong{display:none}}
 @media(display-mode:standalone){.pwa-install-button{display:none!important}body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}}
+
+
+/* V106 - botón PWA visible y accesible */
+.pwa-install-button{
+  right:20px;
+  bottom:22px;
+  min-height:48px;
+  padding:11px 17px;
+  border-radius:16px;
+  border:1px solid color-mix(in srgb,var(--accent,#6d3be8) 72%,#fff 10%);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent,#6d3be8) 92%,#fff 8%),color-mix(in srgb,var(--accent2,var(--accent,#6d3be8)) 78%,#07101c 22%));
+  box-shadow:0 16px 45px color-mix(in srgb,var(--accent,#6d3be8) 38%,transparent),inset 0 1px rgba(255,255,255,.18);
+  transition:transform .18s ease,filter .18s ease,box-shadow .18s ease;
+}
+.pwa-install-button.is-ready::after{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#4dff9a;
+  box-shadow:0 0 14px #4dff9a;
+}
+.pwa-install-button:hover{transform:translateY(-3px);box-shadow:0 20px 55px color-mix(in srgb,var(--accent,#6d3be8) 46%,transparent),inset 0 1px rgba(255,255,255,.2)}
+.pwa-guide-action{
+  position:static!important;
+  width:100%!important;
+  height:auto!important;
+  margin-top:20px;
+  padding:13px 18px;
+  border-radius:13px!important;
+  background:linear-gradient(135deg,var(--accent,#6d3be8),var(--accent2,var(--accent,#6d3be8)))!important;
+  color:#fff!important;
+  font-weight:800;
+  font-size:14px!important;
+}
+@media(max-width:720px){
+  .pwa-install-button{right:12px;bottom:calc(86px + env(safe-area-inset-bottom));min-width:48px;min-height:48px;border-radius:50%;padding:0;justify-content:center}
+}

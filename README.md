@@ -1,3 +1,11 @@
+# THESO V106 — Botón de instalación PWA visible
+
+- Botón **Instalar THESO** visible en PC y móvil mientras la app no esté instalada.
+- Usa `beforeinstallprompt` cuando Chrome, Edge, Opera o Android permiten instalación directa.
+- Muestra instrucciones específicas cuando el navegador todavía no habilita el instalador.
+- Guía especial para iPhone/iPad mediante Safari y “Agregar a pantalla de inicio”.
+- El botón se oculta automáticamente al ejecutar THESO como aplicación instalada.
+
 # THESO V89 — Estados y chat privado avanzado
 
 Esta versión agrega estados de presencia y nuevas funciones persistentes en los chats privados.
