@@ -1,14 +1,3 @@
-# THESO V111
-
-Corrección definitiva de la barra de reproducción integrada debajo del video.
-
-- Barra a todo el ancho del reproductor.
-- Controles centrados.
-- Volumen alineado a la derecha.
-- Progreso en una fila completa.
-- Sin posicionamiento flotante ni ancho dependiente del contenido.
-- Se actualizaron las versiones de recursos para evitar CSS antiguo en caché.
-
 # THESO V106 — Botón de instalación PWA visible
 
 - Botón **Instalar THESO** visible en PC y móvil mientras la app no esté instalada.
@@ -296,9 +285,3 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Corrige la barra de reproducción para que ocupe todo el ancho debajo del video.
 - Evita que el panel se encoja hacia el lado izquierdo.
 - Mantiene controles centrados, progreso completo y volumen alineado a la derecha.
-
-
-## V110
-- La barra de reproducción ocupa todo el ancho debajo del video.
-- Se eliminó el desplazamiento lateral que recortaba los controles.
-- Progreso, botones y volumen quedan alineados dentro del mismo panel.

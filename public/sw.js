@@ -1,4 +1,4 @@
-const CACHE_NAME = "theso-v111-shell";
+const CACHE_NAME = "theso-v107-shell";
 const APP_SHELL = [
   "/",
   "/index.html",
