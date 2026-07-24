@@ -4969,3 +4969,128 @@ body.sidebar-collapsed .pwa-install-icon{width:34px;height:34px;flex-basis:34px}
   .queue-item{min-height:62px!important;grid-template-columns:42px minmax(0,1fr) auto!important;padding:8px!important}
   .queue-item img{width:42px!important;height:42px!important;min-width:42px!important}
 }
+
+/* ======================================================================
+   THESO V109 — Corrección final del reproductor y la cola
+   ====================================================================== */
+.video-stage .video-shell{
+  width:100%!important;
+  max-width:none!important;
+  max-height:none!important;
+  aspect-ratio:16/9!important;
+  margin:0!important;
+  border-radius:14px 14px 0 0!important;
+}
+.video-stage .provider-player-shell,
+.video-stage .provider-player-shell>div,
+.video-stage .provider-player-shell iframe,
+.video-stage #youtubePlayer,
+.video-stage #youtubePlayer iframe{
+  width:100%!important;
+  height:100%!important;
+  max-width:none!important;
+}
+.video-player-controls-wrap{
+  padding:0 14px 14px!important;
+}
+.video-stage .player-dock{
+  width:100%!important;
+  min-height:104px!important;
+  grid-template-columns:1fr auto!important;
+  grid-template-rows:auto auto!important;
+  column-gap:20px!important;
+  row-gap:9px!important;
+  padding:12px 18px 14px!important;
+}
+/* El título ya está arriba del video; evitamos duplicarlo y ganamos espacio. */
+.video-stage .player-dock .track-info{display:none!important}
+.video-stage .player-dock .dock-center{
+  grid-column:1 / -1!important;
+  grid-row:1 / 3!important;
+  width:100%!important;
+  max-width:none!important;
+  display:grid!important;
+  grid-template-rows:auto auto!important;
+  gap:8px!important;
+}
+.video-stage .player-dock .dock-controls{
+  grid-row:1!important;
+  min-height:44px!important;
+  justify-content:center!important;
+  gap:18px!important;
+}
+.video-stage .player-dock .progress-row{
+  grid-row:2!important;
+  width:min(760px,100%)!important;
+  margin:0 auto!important;
+  grid-template-columns:44px minmax(0,1fr) 44px!important;
+}
+.video-stage .player-dock .volume-area{
+  position:absolute!important;
+  right:18px!important;
+  top:16px!important;
+  z-index:2!important;
+}
+.video-stage .player-dock .volume-area input{width:110px!important}
+.video-stage .player-dock .main-play{
+  width:46px!important;
+  height:46px!important;
+}
+
+/* Cola: cuatro columnas reales = número, miniatura, texto y eliminar. */
+.queue-list{counter-reset:queue-number!important}
+.queue-item{
+  grid-template-columns:24px 52px minmax(0,1fr) 34px!important;
+  min-height:74px!important;
+  gap:10px!important;
+  padding:10px!important;
+}
+.queue-item::before{
+  content:counter(queue-number)!important;
+  counter-increment:queue-number!important;
+  display:grid!important;
+  place-items:center!important;
+  align-self:center!important;
+  color:var(--muted,#98a2b7)!important;
+  font-size:12px!important;
+  font-weight:700!important;
+}
+.queue-item img{
+  grid-column:2!important;
+  width:52px!important;
+  height:52px!important;
+  min-width:52px!important;
+}
+.queue-item>div{
+  grid-column:3!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.queue-item .queue-remove-btn{
+  grid-column:4!important;
+  grid-row:1!important;
+  align-self:center!important;
+  justify-self:end!important;
+}
+.queue-item strong{font-size:12px!important;line-height:1.3!important}
+.queue-item span{font-size:10px!important}
+.queue-widget{min-height:320px!important}
+.queue-list{padding:10px 8px 16px!important}
+
+@media(max-width:1180px){
+  .video-stage .player-dock .volume-area{right:12px!important}
+  .video-stage .player-dock .volume-area input{width:80px!important}
+}
+@media(max-width:900px){
+  .video-stage .player-dock{
+    min-height:92px!important;
+    padding:10px 10px 12px!important;
+  }
+  .video-stage .player-dock .dock-controls{gap:12px!important}
+  .video-stage .player-dock .volume-area{display:none!important}
+  .video-stage .player-dock .progress-row{display:grid!important;width:100%!important}
+  .video-stage .dock-controls button{display:grid!important}
+  .video-stage .dock-controls button:not(.main-play):not(#nextBtn):not(#previousBtn){display:none!important}
+  .queue-item{grid-template-columns:20px 46px minmax(0,1fr) 32px!important}
+  .queue-item img{width:46px!important;height:46px!important;min-width:46px!important}
+}

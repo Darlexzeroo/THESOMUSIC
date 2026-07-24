@@ -1,6 +1,6 @@
 {
   "name": "waveroom-youtube",
-  "version": "108.0.0",
+  "version": "109.0.0",
   "private": true,
   "description": "THESO V105 PWA instalable para Windows, Android y iPhone",
   "main": "server.js",

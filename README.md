@@ -274,3 +274,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - La cola usa toda la altura disponible, tiene scroll interno y muestra cada canción completa.
 - Se corrigieron miniaturas, textos truncados y botones de eliminación de la cola.
 - Ajustes responsive para PC, tablet y móvil.
+
+## V109
+- Reproductor integrado a todo el ancho debajo del video.
+- Controles centrados y barra de progreso completa.
+- Cola corregida con columnas separadas para número, miniatura, información y botón de borrar.
+- Mejor visualización de títulos largos y desplazamiento interno.
