@@ -280,3 +280,8 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Controles centrados y barra de progreso completa.
 - Cola corregida con columnas separadas para número, miniatura, información y botón de borrar.
 - Mejor visualización de títulos largos y desplazamiento interno.
+
+## V110
+- Corrige la barra de reproducción para que ocupe todo el ancho debajo del video.
+- Evita que el panel se encoja hacia el lado izquierdo.
+- Mantiene controles centrados, progreso completo y volumen alineado a la derecha.

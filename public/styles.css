@@ -5094,3 +5094,83 @@ body.sidebar-collapsed .pwa-install-icon{width:34px;height:34px;flex-basis:34px}
   .queue-item{grid-template-columns:20px 46px minmax(0,1fr) 32px!important}
   .queue-item img{width:46px!important;height:46px!important;min-width:46px!important}
 }
+
+/* ======================================================================
+   THESO V110 — Barra de reproducción a ancho completo
+   Corrige el panel que se encogía hacia la izquierda debajo del video.
+   ====================================================================== */
+.video-stage > .video-player-controls-wrap{
+  display:block!important;
+  position:relative!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  inline-size:100%!important;
+  margin:0!important;
+  padding:0 14px 14px!important;
+  box-sizing:border-box!important;
+  clear:both!important;
+}
+.video-stage > .video-player-controls-wrap > #playerDock.player-dock{
+  position:relative!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:center!important;
+  inset:auto!important;
+  width:100%!important;
+  min-width:100%!important;
+  max-width:100%!important;
+  inline-size:100%!important;
+  margin:0!important;
+  padding:12px 18px 14px!important;
+  box-sizing:border-box!important;
+  overflow:visible!important;
+}
+.video-stage #playerDock .dock-center{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+}
+.video-stage #playerDock .dock-controls{
+  width:100%!important;
+  min-width:0!important;
+  justify-content:center!important;
+  margin:0!important;
+}
+.video-stage #playerDock .progress-row{
+  display:grid!important;
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  margin:4px 0 0!important;
+  padding:0!important;
+  grid-template-columns:44px minmax(0,1fr) 44px!important;
+}
+.video-stage #playerDock .progress-row input{
+  width:100%!important;
+  min-width:0!important;
+}
+.video-stage #playerDock .volume-area{
+  position:absolute!important;
+  right:18px!important;
+  top:16px!important;
+  margin:0!important;
+}
+@media(max-width:900px){
+  .video-stage > .video-player-controls-wrap{padding:0 8px 8px!important}
+  .video-stage > .video-player-controls-wrap > #playerDock.player-dock{
+    min-width:100%!important;
+    max-width:100%!important;
+    padding:10px 10px 12px!important;
+  }
+  .video-stage #playerDock .progress-row{
+    grid-template-columns:38px minmax(0,1fr) 38px!important;
+  }
+}
