@@ -268,3 +268,9 @@ Al cerrar Discord o cambiar entre Discord e invitado, THESO abandona automática
 - Botón Instalar THESO visible dentro del menú lateral.
 - Indicador cuando la PWA está lista para instalar.
 - Caché PWA actualizado con estrategia de red primero para evitar archivos viejos.
+
+## V108
+- La barra de reproducción dejó de ser flotante y ahora aparece integrada justo debajo del video.
+- La cola usa toda la altura disponible, tiene scroll interno y muestra cada canción completa.
+- Se corrigieron miniaturas, textos truncados y botones de eliminación de la cola.
+- Ajustes responsive para PC, tablet y móvil.

@@ -137,6 +137,16 @@
   <div id="twitchPlayerShell" class="provider-player-shell twitch-player-shell hidden"><iframe id="twitchPlayer" class="twitch-player" title="Reproductor de Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
   <button id="activateAudioBtn" class="audio-unlock hidden" type="button">▶ Activar reproducción</button>
 </div>
+        <div class="video-player-controls-wrap">
+          <footer id="playerDock" class="player-dock hidden" aria-hidden="true">
+            <div class="track-info"><div class="track-cover" id="trackCover">♫</div><div><strong id="nowPlaying">Ninguna canción</strong><span id="trackChannel">--</span></div></div>
+            <div class="dock-center">
+        <div class="dock-controls"><button id="syncBtn" type="button" title="Sincronizar"><svg class="ui-icon"><use href="#i-shuffle"/></svg></button><button id="previousBtn" type="button" title="Anterior" disabled><svg class="ui-icon"><use href="#i-prev"/></svg></button><button id="playBtn" class="main-play" type="button" title="Reproducir"><svg class="ui-icon"><use id="playBtnIcon" href="#i-play"/></svg></button><button id="nextBtn" type="button" title="Siguiente"><svg class="ui-icon"><use href="#i-next"/></svg></button><button id="voteSkipBtn" class="vote-skip-btn" type="button" title="Votar para saltar">🗳 <span id="voteSkipText">0/1</span></button><button id="queueBtn" type="button" title="Repetir"><svg class="ui-icon"><use href="#i-repeat"/></svg></button></div>
+        <div class="progress-row"><span id="currentTime">0:00</span><input id="progressBar" type="range" min="0" max="100" value="0"><span id="durationTime">0:00</span></div>
+            </div>
+            <div class="volume-area"><svg class="ui-icon"><use href="#i-volume"/></svg><input id="volumeBar" type="range" min="0" max="100" value="80" aria-label="Volumen"><button type="button" title="Ver cola"><svg class="ui-icon"><use href="#i-list"/></svg></button></div>
+          </footer>
+        </div>
       </section>
 
       <section class="home-panel" id="homePanel">
@@ -192,14 +202,7 @@
       </section>
     </aside>
 
-    <footer id="playerDock" class="player-dock hidden" aria-hidden="true">
-      <div class="track-info"><div class="track-cover" id="trackCover">♫</div><div><strong id="nowPlaying">Ninguna canción</strong><span id="trackChannel">--</span></div></div>
-      <div class="dock-center">
-        <div class="dock-controls"><button id="syncBtn" type="button" title="Sincronizar"><svg class="ui-icon"><use href="#i-shuffle"/></svg></button><button id="previousBtn" type="button" title="Anterior" disabled><svg class="ui-icon"><use href="#i-prev"/></svg></button><button id="playBtn" class="main-play" type="button" title="Reproducir"><svg class="ui-icon"><use id="playBtnIcon" href="#i-play"/></svg></button><button id="nextBtn" type="button" title="Siguiente"><svg class="ui-icon"><use href="#i-next"/></svg></button><button id="voteSkipBtn" class="vote-skip-btn" type="button" title="Votar para saltar">🗳 <span id="voteSkipText">0/1</span></button><button id="queueBtn" type="button" title="Repetir"><svg class="ui-icon"><use href="#i-repeat"/></svg></button></div>
-        <div class="progress-row"><span id="currentTime">0:00</span><input id="progressBar" type="range" min="0" max="100" value="0"><span id="durationTime">0:00</span></div>
-      </div>
-      <div class="volume-area"><svg class="ui-icon"><use href="#i-volume"/></svg><input id="volumeBar" type="range" min="0" max="100" value="80" aria-label="Volumen"><button type="button" title="Ver cola"><svg class="ui-icon"><use href="#i-list"/></svg></button></div>
-    </footer>
+
   </div>
 
   <div id="roomModal" class="friends-modal room-modal hidden" role="dialog" aria-modal="true" aria-label="Sala">

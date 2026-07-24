@@ -4792,3 +4792,180 @@ body.sidebar-collapsed .pwa-install-icon{width:34px;height:34px;flex-basis:34px}
   .pwa-install-copy{display:grid!important}
 }
 @media(display-mode:standalone){.side-nav .pwa-install-button{display:none!important}}
+
+/* V108 · Reproductor integrado bajo el video y cola legible */
+.app-layout{
+  grid-template-rows:1fr!important;
+}
+
+.video-stage{
+  overflow:hidden!important;
+  padding-bottom:0!important;
+}
+
+.video-player-controls-wrap{
+  position:relative;
+  width:100%;
+  padding:0 14px 14px;
+  background:linear-gradient(180deg,rgba(2,5,12,.15),rgba(7,11,22,.92));
+}
+
+.video-stage .player-dock{
+  position:relative!important;
+  inset:auto!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  top:auto!important;
+  width:100%!important;
+  max-width:none!important;
+  min-height:88px!important;
+  height:auto!important;
+  margin:0!important;
+  padding:12px 16px!important;
+  border-radius:0 0 16px 16px!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-top:0!important;
+  box-shadow:none!important;
+  z-index:3!important;
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) minmax(300px,1.65fr) minmax(160px,.8fr)!important;
+  gap:16px;
+  align-items:center;
+  background:linear-gradient(135deg,rgba(12,18,31,.98),rgba(7,11,22,.98))!important;
+}
+
+.video-stage .player-dock.hidden{display:none!important}
+.video-stage .player-dock::before{display:none!important}
+.video-stage .track-info{min-width:0;display:flex;align-items:center;gap:10px}
+.video-stage .track-info>div:last-child{min-width:0}
+.video-stage .track-info strong,
+.video-stage .track-info span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.video-stage .track-cover{width:52px!important;height:52px!important;min-width:52px;border-radius:10px!important}
+.video-stage .dock-center{min-width:0}
+.video-stage .dock-controls{justify-content:center}
+.video-stage .progress-row{width:100%}
+.video-stage .volume-area{justify-content:flex-end;min-width:0}
+
+/* El panel derecho distribuye bien chat y cola sin cortar canciones. */
+.right-rail{
+  min-height:0!important;
+  height:100vh!important;
+  max-height:100vh!important;
+  overflow:hidden!important;
+  display:grid!important;
+  grid-template-rows:minmax(300px,1.25fr) minmax(300px,1fr)!important;
+  gap:12px!important;
+  padding-bottom:14px!important;
+}
+
+.right-rail>.chat-widget,
+.right-rail>.queue-widget{
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:hidden!important;
+}
+
+.queue-widget{
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr)!important;
+}
+
+.queue-list{
+  min-height:0!important;
+  height:100%!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:10px!important;
+  scroll-padding-bottom:16px;
+}
+
+.queue-item{
+  width:100%!important;
+  min-height:68px!important;
+  display:grid!important;
+  grid-template-columns:46px minmax(0,1fr) auto!important;
+  align-items:center!important;
+  gap:11px!important;
+  padding:9px 10px!important;
+  margin:0 0 8px!important;
+  border:1px solid rgba(255,255,255,.07)!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.025)!important;
+}
+
+.queue-item img{
+  width:46px!important;
+  height:46px!important;
+  min-width:46px!important;
+  object-fit:cover!important;
+  border-radius:9px!important;
+}
+
+.queue-item>div{min-width:0!important}
+.queue-item strong,
+.queue-item span{
+  display:block!important;
+  max-width:100%!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.queue-item strong{font-size:13px!important;line-height:1.25!important}
+.queue-item span{font-size:11px!important;margin-top:4px;color:var(--muted)!important}
+.queue-remove-btn{
+  width:32px!important;
+  height:32px!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  font-size:17px!important;
+  border-radius:9px!important;
+}
+
+@media (max-width:1180px){
+  .video-stage .player-dock{
+    grid-template-columns:minmax(160px,.9fr) minmax(260px,1.45fr) minmax(130px,.65fr)!important;
+    gap:10px;
+  }
+  .right-rail{grid-template-rows:minmax(270px,1fr) minmax(300px,1fr)!important}
+}
+
+@media (max-width:900px){
+  .video-player-controls-wrap{padding:0 8px 8px}
+  .video-stage .player-dock{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    min-height:70px!important;
+    padding:9px 10px!important;
+    border-radius:0 0 14px 14px!important;
+  }
+  .video-stage .player-dock .dock-center{display:flex!important;justify-content:flex-end!important}
+  .video-stage .player-dock .progress-row,
+  .video-stage .player-dock .volume-area{display:none!important}
+  .video-stage .dock-controls button:not(.main-play):not(#nextBtn){display:none!important}
+  .video-stage .track-cover{width:46px!important;height:46px!important;min-width:46px!important}
+  .right-rail{
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+    display:block!important;
+  }
+  .right-rail>.chat-widget,
+  .right-rail>.queue-widget{min-height:340px!important;margin-bottom:10px!important}
+  .queue-list{max-height:430px!important}
+}
+
+@media (max-width:520px){
+  .video-player-controls-wrap{padding:0 6px 6px}
+  .video-stage .player-dock{min-height:64px!important;padding:7px 8px!important}
+  .video-stage .track-cover{width:42px!important;height:42px!important;min-width:42px!important}
+  .video-stage .track-info strong{font-size:12px!important}
+  .video-stage .track-info span{font-size:10px!important}
+  .queue-widget{min-height:360px!important}
+  .queue-list{max-height:500px!important;padding:8px!important}
+  .queue-item{min-height:62px!important;grid-template-columns:42px minmax(0,1fr) auto!important;padding:8px!important}
+  .queue-item img{width:42px!important;height:42px!important;min-width:42px!important}
+}
